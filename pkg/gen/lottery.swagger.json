@@ -1,0 +1,330 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "lottery.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "LotteryService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/api/generate/analyze": {
+      "post": {
+        "summary": "Analyze analyzes user-selected numbers against historical data",
+        "operationId": "LotteryService_Analyze",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1AnalyzeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1AnalyzeRequest"
+            }
+          }
+        ],
+        "tags": [
+          "LotteryService"
+        ]
+      }
+    },
+    "/api/generate/form": {
+      "post": {
+        "summary": "GenerateForm generates lottery number combinations based on input parameters",
+        "operationId": "LotteryService_GenerateForm",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GenerateFormResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1GenerateFormRequest"
+            }
+          }
+        ],
+        "tags": [
+          "LotteryService"
+        ]
+      }
+    },
+    "/api/generate/pares": {
+      "post": {
+        "summary": "GetStatistics calculates statistics for number pairs",
+        "operationId": "LotteryService_GetStatistics",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetStatisticsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1GetStatisticsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "LotteryService"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "HealthCheck returns the health status of the service",
+        "operationId": "LotteryService_HealthCheck",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1HealthCheckResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "LotteryService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1AnalyzeRequest": {
+      "type": "object",
+      "properties": {
+        "user_numbers": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "historical": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "title": "AnalyzeRequest contains parameters for number analysis"
+    },
+    "v1AnalyzeResponse": {
+      "type": "object",
+      "properties": {
+        "frequency": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "pairs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Pair"
+          }
+        },
+        "patterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "title": "AnalyzeResponse contains analysis results"
+    },
+    "v1GenerateFormRequest": {
+      "type": "object",
+      "properties": {
+        "numbers": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "count": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "analysis_type": {
+          "type": "string"
+        }
+      },
+      "title": "GenerateFormRequest contains parameters for generating lottery numbers"
+    },
+    "v1GenerateFormResponse": {
+      "type": "object",
+      "properties": {
+        "numbers": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "title": "GenerateFormResponse contains generated lottery numbers"
+    },
+    "v1GetStatisticsRequest": {
+      "type": "object",
+      "properties": {
+        "numbers": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "analysis_type": {
+          "type": "string"
+        }
+      },
+      "title": "GetStatisticsRequest contains parameters for statistics calculation"
+    },
+    "v1GetStatisticsResponse": {
+      "type": "object",
+      "properties": {
+        "frequency": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "title": "GetStatisticsResponse contains statistical analysis results"
+    },
+    "v1HealthCheckResponse": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "title": "HealthCheckResponse contains the health status of the service"
+    },
+    "v1Pair": {
+      "type": "object",
+      "properties": {
+        "numbers": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "title": "Pair represents a number pair"
+    }
+  }
+}

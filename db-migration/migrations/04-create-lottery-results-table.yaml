@@ -1,0 +1,66 @@
+databaseChangeLog:
+  - changeSet:
+      id: create-lottery-results-table
+      author: stat-tree
+      changes:
+        - createTable:
+            tableName: lottery_results
+            columns:
+              - column:
+                  name: id
+                  type: SERIAL
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: draw_number
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: draw_date
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: numbers
+                  type: INTEGER[]
+                  constraints:
+                    nullable: false
+              - column:
+                  name: strong
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+              - column:
+                  name: lottery_type
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    defaultValue: 'lotto'
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+        - createIndex:
+            indexName: idx_lottery_results_draw_number
+            tableName: lottery_results
+            columns:
+              - column:
+                  name: draw_number
+        - createIndex:
+            indexName: idx_lottery_results_draw_date
+            tableName: lottery_results
+            columns:
+              - column:
+                  name: draw_date
+        - createIndex:
+            indexName: idx_lottery_results_type
+            tableName: lottery_results
+            columns:
+              - column:
+                  name: lottery_type

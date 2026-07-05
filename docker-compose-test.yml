@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: stat-tree-postgres-test
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: statistiloto
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  liquibase:
+    image: liquibase/liquibase:4.25
+    container_name: stat-tree-liquibase-test
+    working_dir: /liquibase/changelog
+    command: --changeLogFile=db.changelog-master.yaml --url=jdbc:postgresql://postgres:5432/statistiloto --username=postgres --password=postgres update
+    volumes:
+      - ./db-migration:/liquibase/changelog
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  test:
+    image: stat-tree-test:latest
+    container_name: stat-tree-test
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: statistiloto
+      DB_SSLMODE: disable
+    depends_on:
+      liquibase:
+        condition: service_completed_successfully
+    volumes:
+      - .:/app
+
+volumes:
+  postgres_test_data:

@@ -1,0 +1,63 @@
+databaseChangeLog:
+  - changeSet:
+      id: seed-sample-user
+      author: stat-tree
+      changes:
+        - insert:
+            tableName: users
+            columns:
+              - column:
+                  name: username
+                  value: testuser
+              - column:
+                  name: email
+                  value: test@example.com
+              - column:
+                  name: password_hash
+                  value: $2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy
+  - changeSet:
+      id: seed-sample-saved-forms
+      author: stat-tree
+      changes:
+        - insert:
+            tableName: saved_forms
+            columns:
+              - column:
+                  name: user_id
+                  valueComputed: (SELECT id FROM users WHERE username = 'testuser')
+              - column:
+                  name: name
+                  value: My Lucky Numbers
+              - column:
+                  name: form_type
+                  value: lucky_numbers
+              - column:
+                  name: numbers
+                  value: '[1, 7, 14, 23, 35, 42]'
+              - column:
+                  name: exclude_numbers
+                  value: '[8, 15]'
+              - column:
+                  name: count
+                  value: 6
+        - insert:
+            tableName: saved_forms
+            columns:
+              - column:
+                  name: user_id
+                  valueComputed: (SELECT id FROM users WHERE username = 'testuser')
+              - column:
+                  name: name
+                  value: Statistical Analysis
+              - column:
+                  name: form_type
+                  value: statistical
+              - column:
+                  name: numbers
+                  value: '[3, 11, 19, 27, 33, 41]'
+              - column:
+                  name: analysis_type
+                  value: frequency
+              - column:
+                  name: generated_result
+                  value: '{"success": true, "message": "Analysis completed"}'

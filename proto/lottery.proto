@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package lottery.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/lihai1/stat-tree-server/pkg/gen;lotteryv1";
+
+// LotteryService provides lottery number generation and analysis capabilities
+service LotteryService {
+  // HealthCheck returns the health status of the service
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse) {
+    option (google.api.http) = {
+      get: "/health"
+    };
+  }
+
+  // GenerateForm generates lottery number combinations based on input parameters
+  rpc GenerateForm(GenerateFormRequest) returns (GenerateFormResponse) {
+    option (google.api.http) = {
+      post: "/api/generate/form"
+      body: "*"
+    };
+  }
+
+  // GetStatistics calculates statistics for number pairs
+  rpc GetStatistics(GetStatisticsRequest) returns (GetStatisticsResponse) {
+    option (google.api.http) = {
+      post: "/api/generate/pares"
+      body: "*"
+    };
+  }
+
+  // Analyze analyzes user-selected numbers against historical data
+  rpc Analyze(AnalyzeRequest) returns (AnalyzeResponse) {
+    option (google.api.http) = {
+      post: "/api/generate/analyze"
+      body: "*"
+    };
+  }
+}
+
+// GenerateFormRequest contains parameters for generating lottery numbers
+message GenerateFormRequest {
+  repeated int32 numbers = 1;
+  repeated int32 exclude = 2;
+  int32 count = 3;
+  string analysis_type = 4;
+}
+
+// GenerateFormResponse contains generated lottery numbers
+message GenerateFormResponse {
+  repeated int32 numbers = 1;
+  bool success = 2;
+  string message = 3;
+}
+
+// GetStatisticsRequest contains parameters for statistics calculation
+message GetStatisticsRequest {
+  repeated int32 numbers = 1;
+  string analysis_type = 2;
+}
+
+// GetStatisticsResponse contains statistical analysis results
+message GetStatisticsResponse {
+  map<int32, int32> frequency = 1;
+  bool success = 2;
+  string message = 3;
+}
+
+// AnalyzeRequest contains parameters for number analysis
+message AnalyzeRequest {
+  repeated int32 user_numbers = 1;
+  repeated int32 historical = 2;
+}
+
+// AnalyzeResponse contains analysis results
+message AnalyzeResponse {
+  map<int32, int32> frequency = 1;
+  repeated Pair pairs = 2;
+  repeated string patterns = 3;
+  bool success = 4;
+  string message = 5;
+}
+
+// Pair represents a number pair
+message Pair {
+  repeated int32 numbers = 1;
+}
+
+// HealthCheckRequest is an empty request for health check
+message HealthCheckRequest {}
+
+// HealthCheckResponse contains the health status of the service
+message HealthCheckResponse {
+  string status = 1;
+  string version = 2;
+}

@@ -1,0 +1,13 @@
+databaseChangeLog:
+  - include:
+      file: migrations/01-create-users-table.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: migrations/02-create-saved-forms-table.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: migrations/03-seed-data.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: migrations/04-create-lottery-results-table.yaml
+      relativeToChangelogFile: true

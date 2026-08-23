@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: stat-tree-postgres
     environment:
       POSTGRES_USER: postgres
@@ -20,7 +20,7 @@ services:
     image: liquibase/liquibase:4.25
     container_name: stat-tree-liquibase
     working_dir: /liquibase/changelog
-    command: --changeLogFile=db.changelog-master.yaml --url=jdbc:postgresql://postgres:5432/statistiloto --username=postgres --password=postgres update
+    command: --changeLogFile=db.changelog-master.yaml --url=jdbc:postgresql://postgres:5432/statistiloto?currentSchema=lottery --username=postgres --password=postgres update
     volumes:
       - ./db-migration:/liquibase/changelog
     depends_on:
@@ -46,7 +46,10 @@ services:
       DB_PASSWORD: postgres
       DB_NAME: statistiloto
       DB_SSLMODE: disable
-      JWT_SECRET: your-secret-key-change-this-in-production
+      DB_SCHEMA: lottery
+      AUTH_ENABLED: "false"
+      LOTTERY_SCRAPER_CRON: "0 3 * * *"
+      LOTTERY_SEED_ON_BOOT: "true"
     depends_on:
       liquibase:
         condition: service_completed_successfully

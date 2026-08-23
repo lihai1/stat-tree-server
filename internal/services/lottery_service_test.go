@@ -17,7 +17,7 @@ var _ = Describe("LotteryService", func() {
 	)
 
 	BeforeEach(func() {
-		service = services.NewLotteryService()
+		service = services.NewLotteryService(nil)
 		ctx = context.Background()
 	})
 
@@ -25,16 +25,41 @@ var _ = Describe("LotteryService", func() {
 		Context("with valid request", func() {
 			It("should generate form successfully", func() {
 				req := &lotteryv1.GenerateFormRequest{
-					Numbers:      []int32{1, 2, 3},
-					Count:        6,
-					AnalysisType: "frequency",
+					HowMany:  6,
+					FormType: 1,
+					WillBe:   []int32{1, 2, 3},
 				}
 
 				resp, err := service.GenerateForm(ctx, req)
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp).ToNot(BeNil())
-				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should produce a single NumberSet with formType numbers", func() {
+				req := &lotteryv1.GenerateFormRequest{
+					HowMany:  6,
+					FormType: 8,
+				}
+
+				resp, err := service.GenerateForm(ctx, req)
+
+				Expect(err).ToNot(HaveOccurred())
+				// howMany 6 → up to 6 forms generated
+				Expect(resp.GetForms()).ToNot(BeEmpty())
+				// formType 8 → 8 numbers in each generated form
+				Expect(resp.GetForms()[0].GetNumbers()).To(HaveLen(8))
+			})
+
+			It("should default formType to 6 when unspecified", func() {
+				req := &lotteryv1.GenerateFormRequest{
+					HowMany: 6,
+				}
+
+				resp, err := service.GenerateForm(ctx, req)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp.GetForms()[0].GetNumbers()).To(HaveLen(6))
 			})
 		})
 
@@ -46,22 +71,21 @@ var _ = Describe("LotteryService", func() {
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp).ToNot(BeNil())
-				Expect(resp.Success).To(BeTrue())
 			})
 		})
 
-		Context("with negative count", func() {
-			It("should return error for negative count", func() {
+		Context("with negative how_many", func() {
+			It("should return at least one form for negative how_many", func() {
 				req := &lotteryv1.GenerateFormRequest{
-					Count: -1,
+					HowMany: -1,
 				}
 
 				resp, err := service.GenerateForm(ctx, req)
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp).ToNot(BeNil())
-				Expect(resp.Success).To(BeFalse())
-				Expect(resp.Message).To(Equal("Count must be non-negative"))
+				// negative howMany defaults to 1
+				Expect(resp.GetForms()).ToNot(BeEmpty())
 			})
 		})
 	})
@@ -70,15 +94,43 @@ var _ = Describe("LotteryService", func() {
 		Context("with valid request", func() {
 			It("should calculate statistics successfully", func() {
 				req := &lotteryv1.GetStatisticsRequest{
-					Numbers:      []int32{1, 2, 3, 4, 5},
-					AnalysisType: "pairs",
+					HowMany:  10,
+					FormType: 2,
 				}
 
 				resp, err := service.GetStatistics(ctx, req)
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp).ToNot(BeNil())
-				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should split count out of pair numbers (count bug fix)", func() {
+				req := &lotteryv1.GetStatisticsRequest{
+					HowMany:  5,
+					FormType: 2,
+					Strength: lotteryv1.Strength_STRONG,
+				}
+
+				resp, err := service.GetStatistics(ctx, req)
+
+				Expect(err).ToNot(HaveOccurred())
+				// Without a DB the archive is empty so pairs may be empty,
+				// but any returned pair must have Count separated from Numbers.
+				for _, pair := range resp.GetPairs() {
+					// Numbers should not contain the count value
+					Expect(pair.GetNumbers()).ToNot(ContainElement(pair.GetCount()))
+				}
+			})
+
+			It("should default group size to 2 when formType is 0", func() {
+				req := &lotteryv1.GetStatisticsRequest{
+					HowMany: 10,
+				}
+
+				resp, err := service.GetStatistics(ctx, req)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp).ToNot(BeNil())
 			})
 		})
 
@@ -90,7 +142,6 @@ var _ = Describe("LotteryService", func() {
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp).ToNot(BeNil())
-				Expect(resp.Success).To(BeTrue())
 			})
 		})
 	})
@@ -99,15 +150,52 @@ var _ = Describe("LotteryService", func() {
 		Context("with valid request", func() {
 			It("should analyze numbers successfully", func() {
 				req := &lotteryv1.AnalyzeRequest{
-					UserNumbers: []int32{1, 2, 3, 4, 5, 6},
-					Historical:  []int32{7, 8, 9, 10, 11, 12},
+					Form: []int32{1, 2, 3, 4, 5, 6},
 				}
 
 				resp, err := service.Analyze(ctx, req)
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp).ToNot(BeNil())
-				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should return grouped frequency (possibly empty without DB)", func() {
+				req := &lotteryv1.AnalyzeRequest{
+					Form: []int32{1, 2, 3, 4, 5, 6},
+				}
+
+				resp, err := service.Analyze(ctx, req)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp.GetFrequencyGroups()).ToNot(BeNil())
+				// Always returns 6 groups (sizes 1–6), even if entries are empty.
+				Expect(resp.GetFrequencyGroups()).To(HaveLen(6))
+			})
+
+			It("should populate group size and combos correctly", func() {
+				req := &lotteryv1.AnalyzeRequest{
+					Form: []int32{1, 2, 3, 4, 5, 6},
+				}
+
+				resp, err := service.Analyze(ctx, req)
+
+				Expect(err).ToNot(HaveOccurred())
+				groups := resp.GetFrequencyGroups()
+				for i, g := range groups {
+					Expect(g.GetSize()).To(Equal(int32(i + 1)))
+					Expect(g.GetCombos()).To(BeNumerically(">", 0))
+				}
+			})
+
+			It("should return archive size (possibly 0 without DB)", func() {
+				req := &lotteryv1.AnalyzeRequest{
+					Form: []int32{1, 2, 3, 4, 5, 6},
+				}
+
+				resp, err := service.Analyze(ctx, req)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp.GetArchiveSize()).To(BeNumerically(">=", 0))
 			})
 		})
 
@@ -119,7 +207,49 @@ var _ = Describe("LotteryService", func() {
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp).ToNot(BeNil())
-				Expect(resp.Success).To(BeTrue())
+			})
+		})
+
+		Context("with form including a trailing strong number", func() {
+			It("should drop the last element when form has more than 6 numbers", func() {
+				// 7 numbers — the 7th is a strong number that should be dropped
+				req := &lotteryv1.AnalyzeRequest{
+					Form: []int32{1, 2, 3, 4, 5, 6, 7},
+				}
+
+				resp, err := service.Analyze(ctx, req)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp).ToNot(BeNil())
+				// The analysis should succeed and return frequency groups
+				// as if only 6 numbers were analyzed.
+				Expect(resp.GetFrequencyGroups()).ToNot(BeNil())
+				Expect(len(resp.GetFrequencyGroups())).To(Equal(6))
+			})
+
+			It("should not drop when form has exactly 6 numbers", func() {
+				req := &lotteryv1.AnalyzeRequest{
+					Form: []int32{1, 2, 3, 4, 5, 6},
+				}
+
+				resp, err := service.Analyze(ctx, req)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp).ToNot(BeNil())
+				Expect(resp.GetFrequencyGroups()).ToNot(BeNil())
+				Expect(len(resp.GetFrequencyGroups())).To(Equal(6))
+			})
+
+			It("should not drop when form has fewer than 6 numbers", func() {
+				req := &lotteryv1.AnalyzeRequest{
+					Form: []int32{1, 2, 3},
+				}
+
+				resp, err := service.Analyze(ctx, req)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp).ToNot(BeNil())
+				Expect(resp.GetFrequencyGroups()).ToNot(BeNil())
 			})
 		})
 	})

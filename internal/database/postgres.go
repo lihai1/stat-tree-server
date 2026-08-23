@@ -17,7 +17,19 @@ type Database struct {
 func NewDatabase(cfg *config.DatabaseConfig) (*Database, error) {
 	connString := buildConnectionString(cfg)
 
-	pool, err := pgxpool.New(context.Background(), connString)
+	poolConfig, err := pgxpool.ParseConfig(connString)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse connection config: %w", err)
+	}
+
+	// Set the search_path to the service's own schema so all unqualified
+	// table references (lottery_results) resolve correctly in the shared
+	// PostgreSQL instance.
+	if cfg.Schema != "" {
+		poolConfig.ConnConfig.RuntimeParams["search_path"] = cfg.Schema
+	}
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create connection pool: %w", err)
 	}
@@ -26,7 +38,7 @@ func NewDatabase(cfg *config.DatabaseConfig) (*Database, error) {
 		return nil, fmt.Errorf("unable to ping database: %w", err)
 	}
 
-	log.Println("Successfully connected to database")
+	log.Printf("Successfully connected to database (schema: %s)", cfg.Schema)
 	return &Database{Pool: pool}, nil
 }
 

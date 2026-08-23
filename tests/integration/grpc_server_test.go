@@ -27,31 +27,27 @@ var _ = Describe("gRPC Server Integration Tests", func() {
 		It("should generate lottery numbers successfully", func() {
 			ctx := context.Background()
 			req := &lotteryv1.GenerateFormRequest{
-				Numbers:      []int32{1, 2, 3, 4, 5, 6},
-				Exclude:      []int32{7, 8, 9},
-				Count:        6,
-				AnalysisType: "standard",
+				HowMany:  6,
+				FormType: 1,
+				WillBe:   []int32{1, 2, 3, 4, 5, 6},
 			}
 
 			resp, err := grpcClient.GenerateForm(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp).NotTo(BeNil())
-			Expect(resp.Success).To(BeTrue())
-			Expect(resp.Numbers).NotTo(BeEmpty())
-			Expect(len(resp.Numbers)).To(BeNumerically("==", 6))
+			Expect(resp.GetForms()).NotTo(BeNil())
 		})
 
-		It("should handle invalid count", func() {
+		It("should handle invalid how_many", func() {
 			ctx := context.Background()
 			req := &lotteryv1.GenerateFormRequest{
-				Count: -1,
+				HowMany: -1,
 			}
 
 			resp, err := grpcClient.GenerateForm(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp).NotTo(BeNil())
-			Expect(resp.Success).To(BeFalse())
-			Expect(resp.Message).To(ContainSubstring("Count must be non-negative"))
+			Expect(resp.GetForms()).To(BeEmpty())
 		})
 	})
 
@@ -59,15 +55,14 @@ var _ = Describe("gRPC Server Integration Tests", func() {
 		It("should calculate statistics successfully", func() {
 			ctx := context.Background()
 			req := &lotteryv1.GetStatisticsRequest{
-				Numbers:      []int32{1, 2, 3, 4, 5, 6},
-				AnalysisType: "standard",
+				HowMany:  10,
+				FormType: 2,
 			}
 
 			resp, err := grpcClient.GetStatistics(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp).NotTo(BeNil())
-			Expect(resp.Success).To(BeTrue())
-			// Frequency map is always initialized, may be empty without historical data
+			// Pairs slice is always initialized, may be empty without historical data
 		})
 	})
 
@@ -75,15 +70,13 @@ var _ = Describe("gRPC Server Integration Tests", func() {
 		It("should analyze numbers successfully", func() {
 			ctx := context.Background()
 			req := &lotteryv1.AnalyzeRequest{
-				UserNumbers: []int32{1, 2, 3, 4, 5, 6},
-				Historical:  []int32{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+				Form: []int32{1, 2, 3, 4, 5, 6},
 			}
 
 			resp, err := grpcClient.Analyze(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp).NotTo(BeNil())
-			Expect(resp.Success).To(BeTrue())
-			// Fields may be empty without historical data
+			// Frequency map is always initialized, may be empty without historical data
 		})
 	})
 })

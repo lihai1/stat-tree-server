@@ -10,7 +10,8 @@ Go backend server for the Statistiloto lottery analysis application using gRPC a
 - Protocol Buffers for service definitions
 - PostgreSQL with pgx driver
 - Liquibase for database migrations
-- JWT authentication
+- Keycloak JWT validation (defense-in-depth, RS256/JWKS)
+- Scheduled scraper for fresh lottery draws
 - Ginkgo/Gomega for testing
 - Environment-based configuration
 
@@ -199,8 +200,15 @@ DB_PASSWORD=postgres
 DB_NAME=statistiloto
 DB_SSLMODE=disable
 
-# JWT Configuration
-JWT_SECRET=your-secret-key-change-this-in-production
+# JWT Configuration (Keycloak JWKS validation)
+AUTH_ENABLED=true
+KEYCLOAK_JWKS_URL=http://localhost:8080/realms/statistiloto/protocol/openid-connect/certs
+KEYCLOAK_ISSUER=http://localhost/auth/realms/statistiloto
+KEYCLOAK_AUDIENCE=account
+
+# Scraper / Seeder
+LOTTERY_SCRAPER_CRON=0 3 * * *
+LOTTERY_SEED_ON_BOOT=true
 ```
 
 ## Architecture
@@ -220,34 +228,29 @@ The application is designed to be stateless and scalable:
 - gRPC for efficient internal service communication
 - REST API for external client access via gRPC-Gateway
 - Connection pooling for database access
-- JWT tokens for authentication
+- Keycloak JWT validation (stateless, RS256 via JWKS) as defense-in-depth
+- Scheduled scraper refreshing lottery_results from pais.co.il
 - Protocol Buffers for efficient serialization
-- Liquibase for database schema management
+- Liquibase for database schema management (lottery schema only)
 
 ## Database
 
 ### Schema
 
-The application uses PostgreSQL with the following main tables:
+The application uses PostgreSQL (shared instance, `lottery` schema) with one table:
 
-- **users**: User accounts with authentication credentials
-  - `id` (UUID, primary key)
-  - `username` (unique)
-  - `email` (unique)
-  - `password_hash`
+- **lottery_results**: Historical lottery draws (scraped from pais.co.il)
+  - `id` (SERIAL, primary key)
+  - `draw_number` (unique)
+  - `draw_date`
+  - `numbers` (INTEGER[])
+  - `strong` (INTEGER)
+  - `lottery_type` (default: 'lotto')
   - `created_at`, `updated_at`
 
-- **saved_forms**: User-saved lottery form configurations
-  - `id` (UUID, primary key)
-  - `user_id` (foreign key to users)
-  - `name` (form name/description)
-  - `form_type` (lucky_numbers, statistical, etc.)
-  - `numbers` (JSONB array)
-  - `exclude_numbers` (JSONB array, optional)
-  - `count` (integer, optional)
-  - `analysis_type` (string, optional)
-  - `generated_result` (JSONB, optional)
-  - `created_at`, `updated_at`
+> **Note**: User accounts and saved forms are owned by the Java BFF (`app`
+> schema) and Keycloak (`keycloak` schema). This service is stateless beyond
+> the `lottery_results` table.
 
 ### Migrations
 
@@ -273,9 +276,10 @@ Migrations are located in the `db-migration/` directory and are automatically ap
 
 The application uses the repository pattern for data access:
 
-- **UserRepository**: CRUD operations for user accounts
-- **SavedFormRepository**: CRUD operations for saved forms
 - **LotteryResultRepository**: CRUD operations for lottery results
+
+> UserRepository and SavedFormRepository have been removed — user data is
+> owned by the Java BFF and Keycloak.
 
 Repositories are initialized in `main.go` and can be injected into services when needed.
 

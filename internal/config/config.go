@@ -12,7 +12,8 @@ import (
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
-	JWT      JWTConfig
+	Auth     AuthConfig
+	Scraper  ScraperConfig
 }
 
 type ServerConfig struct {
@@ -29,10 +30,30 @@ type DatabaseConfig struct {
 	Password string
 	DBName   string
 	SSLMode  string
+	// Schema is the PostgreSQL schema owned by this service (default: lottery).
+	Schema string
 }
 
-type JWTConfig struct {
-	Secret string
+// AuthConfig configures Keycloak-based JWT validation (replaces the old
+// HMAC shared-secret approach). The service validates tokens itself as
+// defense-in-depth, even though Traefik also validates at the edge.
+type AuthConfig struct {
+	// Enabled toggles per-service JWT validation. Keep true in production.
+	Enabled bool
+	// JWKSURL is the Keycloak realm certs endpoint.
+	JWKSURL string
+	// Issuer is the expected `iss` claim (the public realm URL).
+	Issuer string
+	// Audience is the expected `aud` claim.
+	Audience string
+}
+
+type ScraperConfig struct {
+	// Cron schedule for refreshing lottery_results from pais.co.il.
+	// Empty = no scheduled refresh (seed-only). Default: daily at 03:00.
+	Cron string
+	// SeedOnBoot seeds from the scraper on first boot if the table is empty.
+	SeedOnBoot bool
 }
 
 func loadEnvFile() {
@@ -76,14 +97,23 @@ func Load() (*Config, error) {
 			Password: GetEnv("DB_PASSWORD", "postgres"),
 			DBName:   GetEnv("DB_NAME", "statistiloto"),
 			SSLMode:  GetEnv("DB_SSLMODE", "disable"),
+			Schema:   GetEnv("DB_SCHEMA", "lottery"),
 		},
-		JWT: JWTConfig{
-			Secret: GetEnv("JWT_SECRET", "your-secret-key"),
+		Auth: AuthConfig{
+			Enabled:  GetEnvAsBool("AUTH_ENABLED", true),
+			JWKSURL:  GetEnv("KEYCLOAK_JWKS_URL", "http://auth:8080/realms/statistiloto/protocol/openid-connect/certs"),
+			Issuer:   GetEnv("KEYCLOAK_ISSUER", "http://localhost/auth/realms/statistiloto"),
+			Audience: GetEnv("KEYCLOAK_AUDIENCE", "account"),
+		},
+		Scraper: ScraperConfig{
+			Cron:       GetEnv("LOTTERY_SCRAPER_CRON", "0 3 * * *"),
+			SeedOnBoot: GetEnvAsBool("LOTTERY_SEED_ON_BOOT", true),
 		},
 	}
-	log.Printf("Loaded config: Server{Port:%s, Host:%s, GRPC:%s, Gateway:%s}, Database{Host:%s, Port:%s, DB:%s}",
-		cfg.Server.Port, cfg.Server.Host, cfg.Server.GRPCPort, cfg.Server.GatewayPort,
-		cfg.Database.Host, cfg.Database.Port, cfg.Database.DBName)
+	log.Printf("Loaded config: Server{GRPC:%s, Gateway:%s}, Database{Host:%s, Schema:%s}, Auth{enabled:%v}, Scraper{cron:%q, seed:%v}",
+		cfg.Server.GRPCPort, cfg.Server.GatewayPort,
+		cfg.Database.Host, cfg.Database.Schema,
+		cfg.Auth.Enabled, cfg.Scraper.Cron, cfg.Scraper.SeedOnBoot)
 
 	return cfg, nil
 }
@@ -99,6 +129,15 @@ func getEnvAsInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intVal, err := strconv.Atoi(value); err == nil {
 			return intVal
+		}
+	}
+	return defaultValue
+}
+
+func GetEnvAsBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if boolVal, err := strconv.ParseBool(value); err == nil {
+			return boolVal
 		}
 	}
 	return defaultValue

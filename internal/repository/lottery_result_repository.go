@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -54,9 +55,29 @@ func (r *LotteryResultRepository) CreateBatch(ctx context.Context, results []mod
 	}
 	defer tx.Rollback(ctx)
 
+	query := `
+		INSERT INTO lottery_results (draw_number, draw_date, numbers, strong, lottery_type, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (draw_number) DO UPDATE
+		SET draw_date = EXCLUDED.draw_date,
+		    numbers = EXCLUDED.numbers,
+		    strong = EXCLUDED.strong,
+		    lottery_type = EXCLUDED.lottery_type,
+		    updated_at = EXCLUDED.updated_at
+	`
+
 	for _, result := range results {
-		if err := r.Create(ctx, &result); err != nil {
-			return fmt.Errorf("failed to create lottery result batch: %w", err)
+		_, err := tx.Exec(ctx, query,
+			result.DrawNumber,
+			result.DrawDate,
+			result.Numbers,
+			result.Strong,
+			result.LotteryType,
+			result.CreatedAt,
+			result.UpdatedAt,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create lottery result batch (draw %d): %w", result.DrawNumber, err)
 		}
 	}
 
@@ -195,4 +216,62 @@ func (r *LotteryResultRepository) Count(ctx context.Context) (int, error) {
 	}
 
 	return count, nil
+}
+
+// GetByDateRange returns lottery results whose draw_date falls within the
+// optional [from, to] window (inclusive). If both bounds are zero, all
+// results are returned ordered by draw_date ascending so the tree builder
+// sees chronological order. If only one bound is set, the other is open.
+func (r *LotteryResultRepository) GetByDateRange(ctx context.Context, from, to time.Time) ([]models.LotteryResult, error) {
+	hasFrom := !from.IsZero()
+	hasTo := !to.IsZero()
+
+	query := `
+		SELECT id, draw_number, draw_date, numbers, strong, lottery_type, created_at, updated_at
+		FROM lottery_results
+	`
+	args := make([]any, 0, 2)
+	condIndex := 0
+	if hasFrom || hasTo {
+		query += " WHERE "
+		if hasFrom {
+			args = append(args, from)
+			query += "draw_date >= $" + fmt.Sprintf("%d", len(args))
+			condIndex++
+		}
+		if hasTo {
+			if condIndex > 0 {
+				query += " AND "
+			}
+			args = append(args, to)
+			query += "draw_date <= $" + fmt.Sprintf("%d", len(args))
+		}
+	}
+	query += " ORDER BY draw_date ASC"
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get lottery results by date range: %w", err)
+	}
+	defer rows.Close()
+
+	var results []models.LotteryResult
+	for rows.Next() {
+		var result models.LotteryResult
+		if err := rows.Scan(
+			&result.ID,
+			&result.DrawNumber,
+			&result.DrawDate,
+			&result.Numbers,
+			&result.Strong,
+			&result.LotteryType,
+			&result.CreatedAt,
+			&result.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan lottery result: %w", err)
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
 }

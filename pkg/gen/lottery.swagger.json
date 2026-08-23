@@ -6,7 +6,8 @@
   },
   "tags": [
     {
-      "name": "LotteryService"
+      "name": "LotteryService",
+      "description": "LotteryService is the contract between the Java BFF and the Go\nlottery-stats-server. The Go service owns the tree-based analysis engine\n(internal/lottery-tree) and the lottery_results store. It is stateless\nbeyond the historical draws table: no user data, no saved forms."
     }
   ],
   "consumes": [
@@ -18,7 +19,7 @@
   "paths": {
     "/api/generate/analyze": {
       "post": {
-        "summary": "Analyze analyzes user-selected numbers against historical data",
+        "summary": "Analyze evaluates user-selected numbers against historical winning draws.",
         "operationId": "LotteryService_Analyze",
         "responses": {
           "200": {
@@ -37,6 +38,7 @@
         "parameters": [
           {
             "name": "body",
+            "description": "AnalyzeRequest mirrors the original FormAnalyzeCalculations model.",
             "in": "body",
             "required": true,
             "schema": {
@@ -51,7 +53,7 @@
     },
     "/api/generate/form": {
       "post": {
-        "summary": "GenerateForm generates lottery number combinations based on input parameters",
+        "summary": "GenerateForm generates lottery number combinations based on\nhistorical-draw patterns over an optional date window.",
         "operationId": "LotteryService_GenerateForm",
         "responses": {
           "200": {
@@ -70,6 +72,7 @@
         "parameters": [
           {
             "name": "body",
+            "description": "GenerateFormRequest mirrors the original FormCalculations model.",
             "in": "body",
             "required": true,
             "schema": {
@@ -84,7 +87,7 @@
     },
     "/api/generate/pares": {
       "post": {
-        "summary": "GetStatistics calculates statistics for number pairs",
+        "summary": "GetStatistics calculates frequent number pairs/groups over a date window.",
         "operationId": "LotteryService_GetStatistics",
         "responses": {
           "200": {
@@ -103,6 +106,7 @@
         "parameters": [
           {
             "name": "body",
+            "description": "GetStatisticsRequest mirrors the original statsCalculations model.",
             "in": "body",
             "required": true,
             "schema": {
@@ -117,7 +121,7 @@
     },
     "/health": {
       "get": {
-        "summary": "HealthCheck returns the health status of the service",
+        "summary": "HealthCheck returns the health status of the service.",
         "operationId": "LotteryService_HealthCheck",
         "responses": {
           "200": {
@@ -171,135 +175,178 @@
     "v1AnalyzeRequest": {
       "type": "object",
       "properties": {
-        "user_numbers": {
+        "form": {
           "type": "array",
           "items": {
             "type": "integer",
             "format": "int32"
-          }
+          },
+          "description": "The user's selected numbers to evaluate."
         },
-        "historical": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "int32"
-          }
+        "window": {
+          "$ref": "#/definitions/v1DateWindow",
+          "description": "Optional historical window."
         }
       },
-      "title": "AnalyzeRequest contains parameters for number analysis"
+      "description": "AnalyzeRequest mirrors the original FormAnalyzeCalculations model."
     },
     "v1AnalyzeResponse": {
       "type": "object",
       "properties": {
-        "frequency": {
-          "type": "object",
-          "additionalProperties": {
+        "frequency_groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1FrequencyGroup"
+          },
+          "description": "Grouped frequency results, one entry per group size (1–6).\nEach group contains the number combinations of that size and their\noccurrence counts, mirroring the legacy 2D-array analyze output."
+        },
+        "archive_size": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of historical draws used for the analysis (archive size)."
+        }
+      },
+      "description": "AnalyzeResponse is the analysis of the user's form against history."
+    },
+    "v1DateWindow": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "to": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "description": "DateWindow is an optional historical-draw window. If both bounds are unset\nthe service uses the full archive."
+    },
+    "v1FrequencyEntry": {
+      "type": "object",
+      "properties": {
+        "numbers": {
+          "type": "array",
+          "items": {
             "type": "integer",
             "format": "int32"
-          }
+          },
+          "description": "The numbers in this combination (length = group size)."
         },
+        "count": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many times this combination appeared in the archive."
+        }
+      },
+      "description": "FrequencyEntry is one number combination and its occurrence count."
+    },
+    "v1FrequencyGroup": {
+      "type": "object",
+      "properties": {
+        "size": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Group size: 1 = single number, 2 = pair, 3 = triple, etc."
+        },
+        "combos": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Total possible combinations for this group size (C(37, size))."
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1FrequencyEntry"
+          },
+          "description": "Frequency entries in this group, sorted by count descending."
+        }
+      },
+      "description": "FrequencyGroup holds all frequency entries for a specific group size."
+    },
+    "v1GenerateFormRequest": {
+      "type": "object",
+      "properties": {
+        "how_many": {
+          "type": "integer",
+          "format": "int32",
+          "description": "howMany combinations to generate."
+        },
+        "form_type": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Lottery form type/variant (matches original `type` field)."
+        },
+        "will_be": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "description": "Numbers the user wants included in every generated form (\"willBe\")."
+        },
+        "window": {
+          "$ref": "#/definitions/v1DateWindow",
+          "description": "Optional historical window. Unset = full archive."
+        },
+        "strength": {
+          "$ref": "#/definitions/v1Strength",
+          "description": "Strength mode for statistics-aware generation."
+        }
+      },
+      "description": "GenerateFormRequest mirrors the original FormCalculations model."
+    },
+    "v1GenerateFormResponse": {
+      "type": "object",
+      "properties": {
+        "forms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1NumberSet"
+          }
+        }
+      },
+      "description": "GenerateFormResponse is a list of generated combinations."
+    },
+    "v1GetStatisticsRequest": {
+      "type": "object",
+      "properties": {
+        "how_many": {
+          "type": "integer",
+          "format": "int32",
+          "description": "how many pairs/groups to compute."
+        },
+        "form_type": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Lottery form type/variant."
+        },
+        "window": {
+          "$ref": "#/definitions/v1DateWindow",
+          "description": "Optional historical window."
+        },
+        "strength": {
+          "$ref": "#/definitions/v1Strength",
+          "description": "Strength mode (strong/weak pair statistics)."
+        }
+      },
+      "description": "GetStatisticsRequest mirrors the original statsCalculations model."
+    },
+    "v1GetStatisticsResponse": {
+      "type": "object",
+      "properties": {
         "pairs": {
           "type": "array",
           "items": {
             "type": "object",
             "$ref": "#/definitions/v1Pair"
           }
-        },
-        "patterns": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
         }
       },
-      "title": "AnalyzeResponse contains analysis results"
-    },
-    "v1GenerateFormRequest": {
-      "type": "object",
-      "properties": {
-        "numbers": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "int32"
-          }
-        },
-        "exclude": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "int32"
-          }
-        },
-        "count": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "analysis_type": {
-          "type": "string"
-        }
-      },
-      "title": "GenerateFormRequest contains parameters for generating lottery numbers"
-    },
-    "v1GenerateFormResponse": {
-      "type": "object",
-      "properties": {
-        "numbers": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "int32"
-          }
-        },
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        }
-      },
-      "title": "GenerateFormResponse contains generated lottery numbers"
-    },
-    "v1GetStatisticsRequest": {
-      "type": "object",
-      "properties": {
-        "numbers": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "int32"
-          }
-        },
-        "analysis_type": {
-          "type": "string"
-        }
-      },
-      "title": "GetStatisticsRequest contains parameters for statistics calculation"
-    },
-    "v1GetStatisticsResponse": {
-      "type": "object",
-      "properties": {
-        "frequency": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "integer",
-            "format": "int32"
-          }
-        },
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        }
-      },
-      "title": "GetStatisticsResponse contains statistical analysis results"
+      "description": "GetStatisticsResponse is the list of frequent pairs/groups."
     },
     "v1HealthCheckResponse": {
       "type": "object",
@@ -309,9 +356,30 @@
         },
         "version": {
           "type": "string"
+        },
+        "draws_loaded": {
+          "type": "integer",
+          "format": "int32"
         }
       },
-      "title": "HealthCheckResponse contains the health status of the service"
+      "description": "HealthCheckResponse contains the health status of the service."
+    },
+    "v1NumberSet": {
+      "type": "object",
+      "properties": {
+        "numbers": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "strong": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "description": "NumberSet is one generated combination (regular numbers + optional strong)."
     },
     "v1Pair": {
       "type": "object",
@@ -322,9 +390,23 @@
             "type": "integer",
             "format": "int32"
           }
+        },
+        "count": {
+          "type": "integer",
+          "format": "int32"
         }
       },
-      "title": "Pair represents a number pair"
+      "description": "Pair is a frequent number group with its occurrence count."
+    },
+    "v1Strength": {
+      "type": "string",
+      "enum": [
+        "STRENGTH_UNSPECIFIED",
+        "WEAK",
+        "STRONG"
+      ],
+      "default": "STRENGTH_UNSPECIFIED",
+      "description": "Strength selects whether strong-ball statistics are used."
     }
   }
 }

@@ -3,19 +3,28 @@ syntax = "proto3";
 package lottery.v1;
 
 import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/lihai1/stat-tree-server/pkg/gen;lotteryv1";
 
-// LotteryService provides lottery number generation and analysis capabilities
+// Java package for generated stubs.
+option java_package = "com.statistiloto.lottery.v1";
+option java_multiple_files = true;
+
+// LotteryService is the contract between the Java BFF and the Go
+// lottery-stats-server. The Go service owns the tree-based analysis engine
+// (internal/lottery-tree) and the lottery_results store. It is stateless
+// beyond the historical draws table: no user data, no saved forms.
 service LotteryService {
-  // HealthCheck returns the health status of the service
+  // HealthCheck returns the health status of the service.
   rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse) {
     option (google.api.http) = {
       get: "/health"
     };
   }
 
-  // GenerateForm generates lottery number combinations based on input parameters
+  // GenerateForm generates lottery number combinations based on
+  // historical-draw patterns over an optional date window.
   rpc GenerateForm(GenerateFormRequest) returns (GenerateFormResponse) {
     option (google.api.http) = {
       post: "/api/generate/form"
@@ -23,7 +32,7 @@ service LotteryService {
     };
   }
 
-  // GetStatistics calculates statistics for number pairs
+  // GetStatistics calculates frequent number pairs/groups over a date window.
   rpc GetStatistics(GetStatisticsRequest) returns (GetStatisticsResponse) {
     option (google.api.http) = {
       post: "/api/generate/pares"
@@ -31,7 +40,7 @@ service LotteryService {
     };
   }
 
-  // Analyze analyzes user-selected numbers against historical data
+  // Analyze evaluates user-selected numbers against historical winning draws.
   rpc Analyze(AnalyzeRequest) returns (AnalyzeResponse) {
     option (google.api.http) = {
       post: "/api/generate/analyze"
@@ -40,59 +49,110 @@ service LotteryService {
   }
 }
 
-// GenerateFormRequest contains parameters for generating lottery numbers
+// Strength selects whether strong-ball statistics are used.
+enum Strength {
+  STRENGTH_UNSPECIFIED = 0;
+  WEAK = 1;
+  STRONG = 2;
+}
+
+// DateWindow is an optional historical-draw window. If both bounds are unset
+// the service uses the full archive.
+message DateWindow {
+  google.protobuf.Timestamp from = 1;
+  google.protobuf.Timestamp to = 2;
+}
+
+// GenerateFormRequest mirrors the original FormCalculations model.
 message GenerateFormRequest {
-  repeated int32 numbers = 1;
-  repeated int32 exclude = 2;
-  int32 count = 3;
-  string analysis_type = 4;
+  // howMany combinations to generate.
+  int32 how_many = 1;
+  // Lottery form type/variant (matches original `type` field).
+  int32 form_type = 2;
+  // Numbers the user wants included in every generated form ("willBe").
+  repeated int32 will_be = 3;
+  // Optional historical window. Unset = full archive.
+  DateWindow window = 4;
+  // Strength mode for statistics-aware generation.
+  Strength strength = 5;
 }
 
-// GenerateFormResponse contains generated lottery numbers
+// NumberSet is one generated combination (regular numbers + optional strong).
+message NumberSet {
+  repeated int32 numbers = 1;
+  optional int32 strong = 2;
+}
+
+// GenerateFormResponse is a list of generated combinations.
 message GenerateFormResponse {
-  repeated int32 numbers = 1;
-  bool success = 2;
-  string message = 3;
+  repeated NumberSet forms = 1;
 }
 
-// GetStatisticsRequest contains parameters for statistics calculation
+// GetStatisticsRequest mirrors the original statsCalculations model.
 message GetStatisticsRequest {
-  repeated int32 numbers = 1;
-  string analysis_type = 2;
+  // how many pairs/groups to compute.
+  int32 how_many = 1;
+  // Lottery form type/variant.
+  int32 form_type = 2;
+  // Optional historical window.
+  DateWindow window = 3;
+  // Strength mode (strong/weak pair statistics).
+  Strength strength = 4;
 }
 
-// GetStatisticsResponse contains statistical analysis results
-message GetStatisticsResponse {
-  map<int32, int32> frequency = 1;
-  bool success = 2;
-  string message = 3;
-}
-
-// AnalyzeRequest contains parameters for number analysis
-message AnalyzeRequest {
-  repeated int32 user_numbers = 1;
-  repeated int32 historical = 2;
-}
-
-// AnalyzeResponse contains analysis results
-message AnalyzeResponse {
-  map<int32, int32> frequency = 1;
-  repeated Pair pairs = 2;
-  repeated string patterns = 3;
-  bool success = 4;
-  string message = 5;
-}
-
-// Pair represents a number pair
+// Pair is a frequent number group with its occurrence count.
 message Pair {
   repeated int32 numbers = 1;
+  int32 count = 2;
 }
 
-// HealthCheckRequest is an empty request for health check
+// GetStatisticsResponse is the list of frequent pairs/groups.
+message GetStatisticsResponse {
+  repeated Pair pairs = 1;
+}
+
+// AnalyzeRequest mirrors the original FormAnalyzeCalculations model.
+message AnalyzeRequest {
+  // The user's selected numbers to evaluate.
+  repeated int32 form = 1;
+  // Optional historical window.
+  DateWindow window = 2;
+}
+
+// AnalyzeResponse is the analysis of the user's form against history.
+message AnalyzeResponse {
+  // Grouped frequency results, one entry per group size (1–6).
+  // Each group contains the number combinations of that size and their
+  // occurrence counts, mirroring the legacy 2D-array analyze output.
+  repeated FrequencyGroup frequency_groups = 1;
+  // Number of historical draws used for the analysis (archive size).
+  int32 archive_size = 2;
+}
+
+// FrequencyEntry is one number combination and its occurrence count.
+message FrequencyEntry {
+  // The numbers in this combination (length = group size).
+  repeated int32 numbers = 1;
+  // How many times this combination appeared in the archive.
+  int32 count = 2;
+}
+
+// FrequencyGroup holds all frequency entries for a specific group size.
+message FrequencyGroup {
+  // Group size: 1 = single number, 2 = pair, 3 = triple, etc.
+  int32 size = 1;
+  // Total possible combinations for this group size (C(37, size)).
+  int32 combos = 2;
+  // Frequency entries in this group, sorted by count descending.
+  repeated FrequencyEntry entries = 3;
+}
+
+// HealthCheckRequest is an empty request for health check.
 message HealthCheckRequest {}
 
-// HealthCheckResponse contains the health status of the service
+// HealthCheckResponse contains the health status of the service.
 message HealthCheckResponse {
   string status = 1;
   string version = 2;
+  int32 draws_loaded = 3;
 }

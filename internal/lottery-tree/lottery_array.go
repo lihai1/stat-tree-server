@@ -1,6 +1,7 @@
 package lotterytree
 
 import (
+	"math/rand"
 	"sort"
 	"time"
 )
@@ -27,6 +28,8 @@ type LotteryArray struct {
 	FormType      int
 	ArchiveStart  time.Time
 	ArchiveEnd    time.Time
+	tries         []int
+	caseL         int
 }
 
 // NewLotteryArray creates a new lottery array
@@ -219,15 +222,171 @@ func (la *LotteryArray) ReGroup(willBe []int) {
 	}
 }
 
+// GenerateNewCombinations generates cResults unique lottery forms.
+// Mirrors the Java generateNewCombination(cResults, formType, willBe) method.
+// Each iteration: setTries (rank by frequency), reGroup (front-load willBe),
+// then recursive backtracking to find a non-winning combination.
+func (la *LotteryArray) GenerateNewCombinations(cResults, formType int, willBe []int) [][]int {
+	la.BuildTree(6)
+	la.FormType = formType
+	la.Consistance(formType)
+
+	la.Results = make([][]int, cResults)
+	for i := range la.Results {
+		la.Results[i] = nil
+	}
+
+	for i := 0; i < cResults; i++ {
+		la.SetTries()
+		la.ReGroup(willBe)
+		la.generateNewCombination(la.Skip, formType)
+		la.AddResult()
+	}
+	return la.Results
+}
+
+// generateNewCombination is the recursive backtracking search for a
+// non-winning combination. Mirrors the Java generateNewCombination(start, check).
+func (la *LotteryArray) generateNewCombination(start, check int) []int {
+	la.caseL = (la.caseL + 1) % 2
+
+	if la.NotInResults() && la.AllFormsCheck() {
+		return la.CutArrayTo(la.Tries(), la.FormType)
+	}
+	if start == la.FormType || check == len(la.Tries()) {
+		return nil
+	}
+
+	la.Swap(la.Tries(), start, la.Tries(), check)
+	if la.generateNewCombination(start+(la.caseL+1)%2, check+la.caseL) != nil {
+		return la.CutArrayTo(la.Tries(), la.FormType)
+	}
+	if la.generateNewCombination(start+la.caseL, check+(la.caseL+1)%2) != nil {
+		return la.CutArrayTo(la.Tries(), la.FormType)
+	}
+	la.Swap(la.Tries(), start, la.Tries(), check)
+	return nil
+}
+
 // Tries returns the tries array (placeholder - needs implementation)
+// Tries returns the current tries array. If tries hasn't been set
+// (e.g. before SetTries is called), returns a default [1..37] sequence.
 func (la *LotteryArray) Tries() []int {
-	// This needs to be implemented based on the lottery type
-	// For now, return a default array
+	if la.tries != nil {
+		return la.tries
+	}
 	tries := make([]int, 37)
 	for i := 0; i < 37; i++ {
 		tries[i] = i + 1
 	}
 	return tries
+}
+
+// SetTries populates the tries array based on TriesType.
+// Mirrors the Java setTries() method.
+func (la *LotteryArray) SetTries() {
+	switch la.TriesType {
+	case "frequent":
+		la.FrequentNums("strong")
+		la.Strongs = la.FrequentStrong("strong")
+	case "less frequent":
+		la.FrequentNums("weak")
+		la.Strongs = la.FrequentStrong("weak")
+	case "random":
+		la.RandomCombo()
+		la.Strongs = la.RandomStrong()
+	}
+}
+
+// FrequentNums ranks numbers by frequency using the lottery tree.
+// Mirrors the Java frequentNums(weakStrong) method.
+func (la *LotteryArray) FrequentNums(weakStrong string) []int {
+	count := 37
+	if la.Lottery == TripleSeven {
+		count = 70
+	} else if la.Lottery == OneTwoThree {
+		count = 10
+	}
+
+	la.BuildTree(1)
+	tmp := la.Query.BestPares(count, 1, weakStrong)
+
+	frq := make([]int, count)
+	for i := 0; i < len(tmp) && i < count; i++ {
+		if len(tmp[i]) > 0 {
+			frq[i] = tmp[i][0]
+		}
+	}
+	la.tries = frq
+	return frq
+}
+
+// FrequentStrong ranks strong numbers (1-7) by frequency.
+// Mirrors the Java frequentStrongNums(weakStrong) method.
+func (la *LotteryArray) FrequentStrong(weakStrong string) []int {
+	if la.Lottery != Lottery {
+		return []int{}
+	}
+	la.Query = NewLoTree(9)
+	la.Query.Build(la.StrongArchive, 1)
+	tmp := la.Query.BestPares(9, 1, weakStrong)
+
+	frq := make([]int, 7)
+	ind := 0
+	validIdx := 0
+	for i := 0; i < len(tmp) && ind < 7; i++ {
+		if len(tmp[validIdx]) > 0 && tmp[validIdx][0] < 8 {
+			frq[ind] = tmp[validIdx][0]
+			if frq[ind] != 0 {
+				ind++
+			}
+		}
+		validIdx++
+	}
+	return frq
+}
+
+// RandomCombo shuffles numbers randomly into the tries array.
+// Mirrors the Java randomCombo() method.
+func (la *LotteryArray) RandomCombo() []int {
+	count := 37
+	if la.Lottery == TripleSeven {
+		count = 70
+	} else if la.Lottery == OneTwoThree {
+		count = 10
+	}
+
+	frq := make([]int, count)
+	for j := 0; j < count; j++ {
+		frq[j] = rand.Intn(count) + 1
+		for i := 0; i < j; i++ {
+			if frq[i] == frq[j] {
+				frq[j] = (frq[j] % count) + 1
+				i = -1
+			}
+		}
+	}
+	la.tries = frq
+	return frq
+}
+
+// RandomStrong generates random strong numbers (1-7).
+// Mirrors the Java randomStrong() method.
+func (la *LotteryArray) RandomStrong() []int {
+	if la.Lottery != Lottery {
+		return []int{}
+	}
+	frq := make([]int, 7)
+	for j := 0; j < 7; j++ {
+		frq[j] = rand.Intn(7) + 1
+		for i := 0; i < j; i++ {
+			if frq[i] == frq[j] {
+				frq[j] = (frq[j] % 7) + 1
+				i = -1
+			}
+		}
+	}
+	return frq
 }
 
 // WinsInForm sets the wins in form counter
@@ -242,13 +401,13 @@ func (la *LotteryArray) TooManyFollows(lottery []int) bool {
 	l := make([]int, len(lottery))
 	copy(l, lottery)
 	l = la.Sort(l)
-	
+
 	for i := 1; i < len(lottery); i++ {
 		if l[i-1] == l[i]-1 {
 			check++
 		}
 	}
-	
+
 	ok := 1
 	switch len(lottery) {
 	case 12:
@@ -260,7 +419,7 @@ func (la *LotteryArray) TooManyFollows(lottery []int) bool {
 	case 7:
 		ok = 2
 	}
-	
+
 	return check > ok
 }
 
@@ -295,7 +454,7 @@ func (la *LotteryArray) AddResult() {
 	combo := la.Sort(la.CutArrayTo(la.Tries(), la.FormType))
 	finalCombo := make([]int, len(combo)+1)
 	copy(finalCombo, combo)
-	
+
 	for i := 0; i < len(la.Results) && combo != nil; i++ {
 		if la.Results[i] == nil {
 			finalCombo[len(combo)] = la.Strongs[i%7]
@@ -309,7 +468,7 @@ func (la *LotteryArray) AddResult() {
 func (la *LotteryArray) AllFormsCheck() bool {
 	la.TestCount = 0
 	var newNums []int
-	
+
 	switch la.Lottery {
 	case Lottery:
 		newNums = []int{la.Tries()[0], la.Tries()[1], la.Tries()[2], la.Tries()[3], la.Tries()[4], la.Tries()[5]}
@@ -334,7 +493,7 @@ func (la *LotteryArray) AllFormsCheck() bool {
 	case OneTwoThree:
 		newNums = []int{la.Tries()[0], la.Tries()[1], la.Tries()[2]}
 	}
-	
+
 	return true
 }
 
@@ -342,12 +501,12 @@ func (la *LotteryArray) AllFormsCheck() bool {
 func (la *LotteryArray) makePieces(form []int, start, check int) {
 	newNums := la.NewPointerSort(form)
 	la.Pieces.Add(newNums)
-	
+
 	nBank := make([]int, la.FormType-la.MinNum)
 	for j := la.MinNum; j < la.FormType; j++ {
 		nBank[j-la.MinNum] = la.Tries()[j]
 	}
-	
+
 	if start < len(form) && check < len(nBank) {
 		la.Swap(form, start, nBank, check)
 		la.makePieces(form, start, check+1)
@@ -361,10 +520,10 @@ func (t *LoTree) AnalyzeArray(form []int, maxSize int) [][]int {
 	results := make([][]int, 0)
 	tmpList := []int{t.BuildCalls}
 	results = append(results, tmpList)
-	
+
 	sequence := make([]int, 0)
 	t.Anchor.analyzeBuild(form, 0, maxSize, &results, &sequence)
-	
+
 	return results
 }
 
@@ -372,17 +531,17 @@ func (n *LoNode) analyzeBuild(form []int, current, howMany int, results *[][]int
 	if howMany == 0 {
 		return
 	}
-	
+
 	for i := current; i < len(form); i++ {
 		treeIndex := form[i] - n.Num - 1
 		if treeIndex >= 0 && treeIndex < len(n.Next) && n.Next[treeIndex] != nil {
 			*sequence = append(*sequence, form[i])
 			*sequence = append(*sequence, n.Next[treeIndex].Count)
-			
+
 			newSeq := make([]int, len(*sequence))
 			copy(newSeq, *sequence)
 			*results = append(*results, newSeq)
-			
+
 			*sequence = (*sequence)[:len(*sequence)-1]
 			n.Next[treeIndex].analyzeBuild(form, i+1, howMany-1, results, sequence)
 			*sequence = (*sequence)[:len(*sequence)-1]

@@ -9,6 +9,7 @@ import (
 	lotterytree "github.com/lihai1/stat-tree-server/internal/lottery-tree"
 	"github.com/lihai1/stat-tree-server/internal/models"
 	"github.com/lihai1/stat-tree-server/internal/repository"
+	"github.com/lihai1/stat-tree-server/internal/utils"
 	lotteryv1 "github.com/lihai1/stat-tree-server/pkg/gen"
 )
 
@@ -132,10 +133,7 @@ func (s *LotteryService) GenerateForm(ctx context.Context, req *lotteryv1.Genera
 	}
 
 	// Lucky numbers (willBe) to front-load.
-	willBe := make([]int, len(req.GetWillBe()))
-	for i, n := range req.GetWillBe() {
-		willBe[i] = int(n)
-	}
+	willBe := utils.Int32sToInts(req.GetWillBe())
 
 	// Generate howMany forms using the full algorithm.
 	results := la.GenerateNewCombinations(howMany, formType, willBe)
@@ -151,16 +149,10 @@ func (s *LotteryService) GenerateForm(ctx context.Context, req *lotteryv1.Genera
 		var numbers []int32
 		var strong int32
 		if len(row) > formType {
-			numbers = make([]int32, formType)
-			for i := 0; i < formType; i++ {
-				numbers[i] = int32(row[i])
-			}
+			numbers = utils.IntsToInt32s(row[:formType])
 			strong = int32(row[formType])
 		} else {
-			numbers = make([]int32, len(row))
-			for i, n := range row {
-				numbers[i] = int32(n)
-			}
+			numbers = utils.IntsToInt32s(row)
 		}
 		ns := &lotteryv1.NumberSet{Numbers: numbers}
 		if strong > 0 {
@@ -175,11 +167,7 @@ func (s *LotteryService) GenerateForm(ctx context.Context, req *lotteryv1.Genera
 		la.SetTries()
 		la.ReGroup(willBe)
 		numbers := la.Sort(la.CutArrayTo(la.Tries(), formType))
-		nums32 := make([]int32, len(numbers))
-		for i, n := range numbers {
-			nums32[i] = int32(n)
-		}
-		forms = append(forms, &lotteryv1.NumberSet{Numbers: nums32})
+		forms = append(forms, &lotteryv1.NumberSet{Numbers: utils.IntsToInt32s(numbers)})
 	}
 
 	return &lotteryv1.GenerateFormResponse{
@@ -238,12 +226,7 @@ func (s *LotteryService) GetStatistics(ctx context.Context, req *lotteryv1.GetSt
 			count = int32(row[len(row)-1])
 			nums = row[:len(row)-1]
 		}
-		resultNums := make([]int32, 0, len(nums))
-		for _, num := range nums {
-			if num > 0 {
-				resultNums = append(resultNums, int32(num))
-			}
-		}
+		resultNums := utils.IntsToInt32sFiltered(nums)
 		if len(resultNums) > 0 {
 			pairs = append(pairs, &lotteryv1.Pair{
 				Numbers: resultNums,
@@ -277,10 +260,7 @@ func (s *LotteryService) Analyze(ctx context.Context, req *lotteryv1.AnalyzeRequ
 	}
 
 	// Convert request numbers to int slice.
-	numbers := make([]int, len(req.GetForm()))
-	for i, num := range req.GetForm() {
-		numbers[i] = int(num)
-	}
+	numbers := utils.Int32sToInts(req.GetForm())
 
 	// Defensive: if the form includes a trailing strong number (>6 regular
 	// numbers for lotto), drop the last element to match the legacy server

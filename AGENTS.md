@@ -28,8 +28,8 @@ The orchestrator repo's `make proto-go` runs this inside the container.
   See `internal/lottery-tree/README.md` for algorithm docs.
 - `internal/repository/` — `lottery_result_repository.go`, pgx data access.
 - `internal/scraper/` — `pais_scraper.go`, downloads CSV from pais.co.il.
-- `internal/seeder/` — `lottery_seeder.go`, seeds DB on first boot if empty.
-- `internal/services/` — `lottery_service.go`, gRPC service impl. Stateless: archive
+- `internal/seeder/` — `lottery_seeder.go`, seeds DB on first boot if empty; `prize_seeder.go`, populates `prize_amounts`.
+- `internal/services/` — `lottery_service.go`, gRPC service impl; `simulate.go`, Simulate backtest logic. Stateless: archive
   loaded fresh per RPC.
 - `internal/server/` — `grpc.go` (gRPC server), `gateway.go` (REST gateway + swagger).
 - `internal/middleware/` — `auth.go` (JWT validation), `logging.go`.
@@ -41,11 +41,11 @@ The orchestrator repo's `make proto-go` runs this inside the container.
 ## gRPC service
 
 `lottery.v1.LotteryService` (proto/lottery.proto:18):
-- `HealthCheck`, `GenerateForm`, `GetStatistics`, `Analyze`.
+- `HealthCheck`, `GenerateForm`, `GetStatistics`, `Analyze`, `Simulate`.
 
 REST gateway (via grpc-gateway, gateway.go):
 - `GET /health` (open)
-- `POST /api/generate/form`, `POST /api/generate/pares`, `POST /api/generate/analyze`
+- `POST /api/generate/form`, `POST /api/generate/pares`, `POST /api/generate/analyze`, `POST /api/generate/simulate`
 - `GET /swagger` (openapi JSON)
 
 All non-health routes require JWT when `AUTH_ENABLED=true` (defense-in-depth; Traefik

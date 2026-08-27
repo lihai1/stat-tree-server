@@ -4,6 +4,8 @@ import (
 	"math/rand"
 	"sort"
 	"time"
+
+	lotteryv1 "github.com/lihai1/stat-tree-server/pkg/gen"
 )
 
 // LotteryArray represents the main lottery analysis structure
@@ -30,6 +32,7 @@ type LotteryArray struct {
 	ArchiveEnd    time.Time
 	tries         []int
 	caseL         int
+	seen          map[uint64]bool
 }
 
 // NewLotteryArray creates a new lottery array
@@ -157,14 +160,14 @@ func (la *LotteryArray) RepeatingPares(paresGeneral, howMany int, weakStrong str
 	return ans
 }
 
-// AnalyzeForm analyzes a form against the tree
-func (la *LotteryArray) AnalyzeForm(form []int) [][]int {
-	max := 6
-	if la.Lottery == Lottery {
-		max = 6
-	}
-	la.BuildTree(max)
-	return la.Query.AnalyzeArray(form, max)
+// AnalyzeForm analyzes a form against the tree and returns a complete
+// AnalyzeResponse with FrequencyGroup messages (one per subset size 1–6,
+// sorted by count descending) and the archive size. The tree builds proto
+// entries directly during recursion via prefix-by-value propagation — no
+// intermediate structures, no mutable accumulator state.
+func (la *LotteryArray) AnalyzeForm(form []int) *lotteryv1.AnalyzeResponse {
+	la.BuildTree(6)
+	return la.Query.AnalyzeArray(form, 6)
 }
 
 // SetFrequentCombo sets the tries type to frequent
@@ -235,6 +238,7 @@ func (la *LotteryArray) GenerateNewCombinations(cResults, formType int, willBe [
 	for i := range la.Results {
 		la.Results[i] = nil
 	}
+	la.seen = make(map[uint64]bool)
 
 	for i := 0; i < cResults; i++ {
 		la.SetTries()
@@ -424,41 +428,47 @@ func (la *LotteryArray) TooManyFollows(lottery []int) bool {
 }
 
 // NotInResults checks if a combination is not in results
+// NotInResults is the backtracking pruning condition: returns true if the
+// current tries permutation (first formType elements, sorted) has not been
+// stored in Results yet. Uses a bitset hash set for O(1) lookup — the key
+// is a uint64 bitmask of the sorted numbers, so the strong number (appended
+// by AddResult) never affects duplicate detection.
+//
+// Mirrors the Java notInResults() intent: compare the first check.length
+// elements of each result, ignoring the trailing strong.
 func (la *LotteryArray) NotInResults() bool {
 	check := la.Sort(la.CutArrayTo(la.Tries(), la.FormType))
-	for i := 0; i < len(la.Results); i++ {
-		if la.Results[i] == nil {
-			return true
-		}
-		if la.equalsSlices(check, la.Results[i]) {
-			return false
-		}
-	}
-	return true
+	return !la.seen[comboMask(check)]
 }
 
-func (la *LotteryArray) equalsSlices(a, b []int) bool {
-	if len(a) != len(b) {
-		return false
+// comboMask returns a bitmask identifying the set of numbers. Bit N is set
+// if number N is present. For Lottery (1-37) this fits in a single uint64.
+// Two combos are equal iff their masks are equal — this IS the set.
+// Order-independent: comboMask([3,1,2]) == comboMask([1,2,3]).
+func comboMask(nums []int) uint64 {
+	var mask uint64
+	for _, n := range nums {
+		mask |= 1 << uint64(n)
 	}
-	for i := 0; i < len(a); i++ {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
+	return mask
 }
 
-// AddResult adds a result to the results array
+// AddResult stores the current tries permutation in the next available
+// Results slot (with strong appended) and registers it in the seen set
+// so future backtracking iterations skip it.
 func (la *LotteryArray) AddResult() {
 	combo := la.Sort(la.CutArrayTo(la.Tries(), la.FormType))
+	if combo == nil {
+		return
+	}
 	finalCombo := make([]int, len(combo)+1)
 	copy(finalCombo, combo)
 
-	for i := 0; i < len(la.Results) && combo != nil; i++ {
+	for i := 0; i < len(la.Results); i++ {
 		if la.Results[i] == nil {
 			finalCombo[len(combo)] = la.Strongs[i%7]
 			la.Results[i] = finalCombo
+			la.seen[comboMask(combo)] = true
 			break
 		}
 	}
@@ -515,36 +525,59 @@ func (la *LotteryArray) makePieces(form []int, start, check int) {
 	}
 }
 
-// AnalyzeArray analyzes a form against the tree and returns results
-func (t *LoTree) AnalyzeArray(form []int, maxSize int) [][]int {
-	results := make([][]int, 0)
-	tmpList := []int{t.BuildCalls}
-	results = append(results, tmpList)
-
-	sequence := make([]int, 0)
-	t.Anchor.analyzeBuild(form, 0, maxSize, &results, &sequence)
-
-	return results
-}
-
-func (n *LoNode) analyzeBuild(form []int, current, howMany int, results *[][]int, sequence *[]int) {
-	if howMany == 0 {
-		return
+// AnalyzeArray traverses the lottery tree for the given form and builds
+// the AnalyzeResponse in a single forward pass. FrequencyEntry messages are
+// appended directly to the correct FrequencyGroup during recursion — the
+// prefix (numbers above this depth) is passed by value, so each entry is
+// constructed once, forward, with no re-loop or mutable accumulator.
+//
+// Mirrors the old Java analyzeArray pattern: create output container, call
+// analyzeBuild which populates it directly, sort, return. No intermediate
+// structures, no post-processing grouping loops.
+func (t *LoTree) AnalyzeArray(form []int, maxSize int) *lotteryv1.AnalyzeResponse {
+	groups := make([]*lotteryv1.FrequencyGroup, 6)
+	for i := range groups {
+		groups[i] = &lotteryv1.FrequencyGroup{Size: int32(i + 1)}
 	}
 
+	t.Anchor.analyzeBuild(form, 0, 0, maxSize, groups, nil)
+
+	for _, g := range groups {
+		sort.SliceStable(g.Entries, func(a, b int) bool {
+			return g.Entries[a].GetCount() > g.Entries[b].GetCount()
+		})
+	}
+
+	return &lotteryv1.AnalyzeResponse{
+		FrequencyGroups: groups,
+		ArchiveSize:     int32(t.BuildCalls),
+	}
+}
+
+func (n *LoNode) analyzeBuild(form []int, current, size, maxSize int,
+	groups []*lotteryv1.FrequencyGroup, prefix []int32) {
+	if size == maxSize {
+		return
+	}
 	for i := current; i < len(form); i++ {
 		treeIndex := form[i] - n.Num - 1
 		if treeIndex >= 0 && treeIndex < len(n.Next) && n.Next[treeIndex] != nil {
-			*sequence = append(*sequence, form[i])
-			*sequence = append(*sequence, n.Next[treeIndex].Count)
+			child := n.Next[treeIndex]
+			newSize := size + 1
 
-			newSeq := make([]int, len(*sequence))
-			copy(newSeq, *sequence)
-			*results = append(*results, newSeq)
+			// Build this entry's numbers from prefix + current number.
+			// Forward construction — no re-loop, no shared mutable state.
+			numbers := make([]int32, newSize)
+			copy(numbers, prefix)
+			numbers[size] = int32(form[i])
 
-			*sequence = (*sequence)[:len(*sequence)-1]
-			n.Next[treeIndex].analyzeBuild(form, i+1, howMany-1, results, sequence)
-			*sequence = (*sequence)[:len(*sequence)-1]
+			groups[newSize-1].Entries = append(groups[newSize-1].Entries,
+				&lotteryv1.FrequencyEntry{
+					Numbers: numbers,
+					Count:   int32(child.Count),
+				})
+
+			child.analyzeBuild(form, i+1, newSize, maxSize, groups, numbers)
 		}
 	}
 }

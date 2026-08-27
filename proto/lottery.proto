@@ -47,6 +47,17 @@ service LotteryService {
       body: "*"
     };
   }
+
+  // Simulate backtests a user's numbers against historical draws over a date
+  // window, computing ticket cost spent and prizes won per draw and in total.
+  // Supports systematic forms (6, 8, 10, 12 numbers) where all C(N,6)
+  // combinations are played per draw.
+  rpc Simulate(SimulateRequest) returns (SimulateResponse) {
+    option (google.api.http) = {
+      post: "/api/generate/simulate"
+      body: "*"
+    };
+  }
 }
 
 // Strength selects whether strong-ball statistics are used.
@@ -155,4 +166,90 @@ message HealthCheckResponse {
   string status = 1;
   string version = 2;
   int32 draws_loaded = 3;
+}
+
+// ── Simulate (backtest) ───────────────────────────────────────────
+
+// SimulateRequest backtests a user's form against historical draws.
+// The form may contain 6, 8, 10, or 12 numbers (systematic forms).
+// For N > 6, all C(N,6) combinations are played per draw.
+message SimulateRequest {
+  // The user's selected numbers (6, 8, 10, or 12 for systematic forms).
+  repeated int32 form = 1;
+  // The user's strong number (1-7). 0 = no strong number.
+  int32 strong = 2;
+  // Optional historical window. Unset = full archive.
+  DateWindow window = 3;
+  // Ticket cost per table/combination in ILS. Default 3.0.
+  double ticket_cost = 4;
+  // User-configurable prize amounts per tier (ILS). If empty, service
+  // defaults are used. Index 0 = tier 1 (6+strong), ..., 7 = tier 8 (3).
+  // Must be length 0 or 8.
+  repeated double prize_amounts = 5;
+}
+
+// SimulateTierHit records how many combinations hit a specific prize tier
+// in a single draw.
+message SimulateTierHit {
+  // Prize tier 1-8 (1 = 6+strong, 8 = 3 matches).
+  int32 tier = 1;
+  // Number of combinations that hit this tier in this draw.
+  int32 hits = 2;
+  // Prize amount per hit (ILS).
+  double amount_per_hit = 3;
+  // Total prize for this tier in this draw (hits × amount_per_hit).
+  double total = 4;
+}
+
+// SimulateDrawResult is the simulation result for a single historical draw.
+message SimulateDrawResult {
+  int32 draw_number = 1;
+  google.protobuf.Timestamp draw_date = 2;
+  repeated int32 winning_numbers = 3;
+  int32 winning_strong = 4;
+  // Prize tiers hit in this draw (may be multiple for systematic forms).
+  repeated SimulateTierHit tier_hits = 5;
+  // Total prize won in this draw (ILS).
+  double prize_won = 6;
+  // Ticket cost for this draw (ILS).
+  double ticket_cost = 7;
+  // True when the prize amounts used for this draw came from the scraped
+  // per-draw prize data (lottery_results.prize_amounts). False when the
+  // service fell back to default estimates or user-supplied overrides.
+  bool used_real_prizes = 8;
+}
+
+// SimulateTierSummary is the aggregated summary for a single prize tier
+// across all simulated draws.
+message SimulateTierSummary {
+  // Prize tier 1-8.
+  int32 tier = 1;
+  // Human-readable label (e.g. "6+strong", "5", "3+strong").
+  string label = 2;
+  // Total number of combinations that hit this tier across all draws.
+  int32 total_hits = 3;
+  // Total prize amount for this tier across all draws (ILS).
+  double total_amount = 4;
+}
+
+// SimulateSummary is the aggregated summary over all simulated draws.
+message SimulateSummary {
+  int32 total_draws = 1;
+  int32 total_combinations = 2;
+  double total_spent = 3;
+  double total_won = 4;
+  // Net profit/loss (total_won - total_spent) in ILS.
+  double net = 5;
+  // Per-tier summaries (always 8 entries, tiers 1-8).
+  repeated SimulateTierSummary tier_summaries = 6;
+  // Number of draws whose prize amounts came from scraped per-draw data
+  // (rather than default estimates or user overrides).
+  int32 draws_with_real_prizes = 7;
+}
+
+// SimulateResponse is the response from the Simulate RPC.
+message SimulateResponse {
+  // Per-draw results, ordered by draw_date ascending.
+  repeated SimulateDrawResult draws = 1;
+  SimulateSummary summary = 2;
 }

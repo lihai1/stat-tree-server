@@ -1,0 +1,17 @@
+databaseChangeLog:
+  - changeSet:
+      id: add-prize-amounts-column
+      author: stat-tree
+      changes:
+        - addColumn:
+            tableName: lottery_results
+            columns:
+              - column:
+                  name: prize_amounts
+                  type: JSONB
+                  constraints:
+                    nullable: true
+      remarks: >
+        Stores per-tier prize amounts (ILS) as a JSON array of 8 floats.
+        Index 0 = tier 1 (6+strong), ..., 7 = tier 8 (3 matches).
+        Populated by the prize scraper from the paisAPI; null when not yet fetched.

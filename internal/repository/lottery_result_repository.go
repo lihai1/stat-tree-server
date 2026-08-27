@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,13 +21,14 @@ func NewLotteryResultRepository(pool *pgxpool.Pool) *LotteryResultRepository {
 
 func (r *LotteryResultRepository) Create(ctx context.Context, result *models.LotteryResult) error {
 	query := `
-		INSERT INTO lottery_results (draw_number, draw_date, numbers, strong, lottery_type, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO lottery_results (draw_number, draw_date, numbers, strong, lottery_type, prize_amounts, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (draw_number) DO UPDATE
 		SET draw_date = EXCLUDED.draw_date,
 		    numbers = EXCLUDED.numbers,
 		    strong = EXCLUDED.strong,
 		    lottery_type = EXCLUDED.lottery_type,
+		    prize_amounts = COALESCE(EXCLUDED.prize_amounts, lottery_results.prize_amounts),
 		    updated_at = EXCLUDED.updated_at
 		RETURNING id, created_at, updated_at
 	`
@@ -37,6 +39,7 @@ func (r *LotteryResultRepository) Create(ctx context.Context, result *models.Lot
 		result.Numbers,
 		result.Strong,
 		result.LotteryType,
+		result.PrizeAmounts,
 		result.CreatedAt,
 		result.UpdatedAt,
 	).Scan(&result.ID, &result.CreatedAt, &result.UpdatedAt)
@@ -56,13 +59,14 @@ func (r *LotteryResultRepository) CreateBatch(ctx context.Context, results []mod
 	defer tx.Rollback(ctx)
 
 	query := `
-		INSERT INTO lottery_results (draw_number, draw_date, numbers, strong, lottery_type, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO lottery_results (draw_number, draw_date, numbers, strong, lottery_type, prize_amounts, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (draw_number) DO UPDATE
 		SET draw_date = EXCLUDED.draw_date,
 		    numbers = EXCLUDED.numbers,
 		    strong = EXCLUDED.strong,
 		    lottery_type = EXCLUDED.lottery_type,
+		    prize_amounts = COALESCE(EXCLUDED.prize_amounts, lottery_results.prize_amounts),
 		    updated_at = EXCLUDED.updated_at
 	`
 
@@ -73,6 +77,7 @@ func (r *LotteryResultRepository) CreateBatch(ctx context.Context, results []mod
 			result.Numbers,
 			result.Strong,
 			result.LotteryType,
+			result.PrizeAmounts,
 			result.CreatedAt,
 			result.UpdatedAt,
 		)
@@ -90,7 +95,7 @@ func (r *LotteryResultRepository) CreateBatch(ctx context.Context, results []mod
 
 func (r *LotteryResultRepository) GetByID(ctx context.Context, id int) (*models.LotteryResult, error) {
 	query := `
-		SELECT id, draw_number, draw_date, numbers, strong, lottery_type, created_at, updated_at
+		SELECT id, draw_number, draw_date, numbers, strong, lottery_type, prize_amounts, created_at, updated_at
 		FROM lottery_results
 		WHERE id = $1
 	`
@@ -103,6 +108,7 @@ func (r *LotteryResultRepository) GetByID(ctx context.Context, id int) (*models.
 		&result.Numbers,
 		&result.Strong,
 		&result.LotteryType,
+		&result.PrizeAmounts,
 		&result.CreatedAt,
 		&result.UpdatedAt,
 	)
@@ -116,7 +122,7 @@ func (r *LotteryResultRepository) GetByID(ctx context.Context, id int) (*models.
 
 func (r *LotteryResultRepository) GetByDrawNumber(ctx context.Context, drawNumber int) (*models.LotteryResult, error) {
 	query := `
-		SELECT id, draw_number, draw_date, numbers, strong, lottery_type, created_at, updated_at
+		SELECT id, draw_number, draw_date, numbers, strong, lottery_type, prize_amounts, created_at, updated_at
 		FROM lottery_results
 		WHERE draw_number = $1
 	`
@@ -129,6 +135,7 @@ func (r *LotteryResultRepository) GetByDrawNumber(ctx context.Context, drawNumbe
 		&result.Numbers,
 		&result.Strong,
 		&result.LotteryType,
+		&result.PrizeAmounts,
 		&result.CreatedAt,
 		&result.UpdatedAt,
 	)
@@ -142,7 +149,7 @@ func (r *LotteryResultRepository) GetByDrawNumber(ctx context.Context, drawNumbe
 
 func (r *LotteryResultRepository) GetAll(ctx context.Context, limit int) ([]models.LotteryResult, error) {
 	query := `
-		SELECT id, draw_number, draw_date, numbers, strong, lottery_type, created_at, updated_at
+		SELECT id, draw_number, draw_date, numbers, strong, lottery_type, prize_amounts, created_at, updated_at
 		FROM lottery_results
 		ORDER BY draw_date DESC
 	`
@@ -167,6 +174,7 @@ func (r *LotteryResultRepository) GetAll(ctx context.Context, limit int) ([]mode
 			&result.Numbers,
 			&result.Strong,
 			&result.LotteryType,
+			&result.PrizeAmounts,
 			&result.CreatedAt,
 			&result.UpdatedAt,
 		)
@@ -181,7 +189,7 @@ func (r *LotteryResultRepository) GetAll(ctx context.Context, limit int) ([]mode
 
 func (r *LotteryResultRepository) GetLatest(ctx context.Context) (*models.LotteryResult, error) {
 	query := `
-		SELECT id, draw_number, draw_date, numbers, strong, lottery_type, created_at, updated_at
+		SELECT id, draw_number, draw_date, numbers, strong, lottery_type, prize_amounts, created_at, updated_at
 		FROM lottery_results
 		ORDER BY draw_date DESC
 		LIMIT 1
@@ -195,6 +203,7 @@ func (r *LotteryResultRepository) GetLatest(ctx context.Context) (*models.Lotter
 		&result.Numbers,
 		&result.Strong,
 		&result.LotteryType,
+		&result.PrizeAmounts,
 		&result.CreatedAt,
 		&result.UpdatedAt,
 	)
@@ -227,7 +236,7 @@ func (r *LotteryResultRepository) GetByDateRange(ctx context.Context, from, to t
 	hasTo := !to.IsZero()
 
 	query := `
-		SELECT id, draw_number, draw_date, numbers, strong, lottery_type, created_at, updated_at
+		SELECT id, draw_number, draw_date, numbers, strong, lottery_type, prize_amounts, created_at, updated_at
 		FROM lottery_results
 	`
 	args := make([]any, 0, 2)
@@ -265,6 +274,7 @@ func (r *LotteryResultRepository) GetByDateRange(ctx context.Context, from, to t
 			&result.Numbers,
 			&result.Strong,
 			&result.LotteryType,
+			&result.PrizeAmounts,
 			&result.CreatedAt,
 			&result.UpdatedAt,
 		); err != nil {
@@ -274,4 +284,48 @@ func (r *LotteryResultRepository) GetByDateRange(ctx context.Context, from, to t
 	}
 
 	return results, nil
+}
+
+// UpdatePrizeAmounts updates the prize_amounts column for a single draw.
+func (r *LotteryResultRepository) UpdatePrizeAmounts(ctx context.Context, drawNumber int, prizeAmounts []float64) error {
+	log.Printf("Repository.UpdatePrizeAmounts: updating draw %d with %d prize amounts", drawNumber, len(prizeAmounts))
+	query := `
+		UPDATE lottery_results
+		SET prize_amounts = $2, updated_at = CURRENT_TIMESTAMP
+		WHERE draw_number = $1
+	`
+	_, err := r.pool.Exec(ctx, query, drawNumber, prizeAmounts)
+	if err != nil {
+		log.Printf("Repository.UpdatePrizeAmounts: failed to update draw %d: %v", drawNumber, err)
+		return fmt.Errorf("failed to update prize amounts for draw %d: %w", drawNumber, err)
+	}
+	return nil
+}
+
+// GetDrawsWithoutPrizes returns draw numbers that have no prize_amounts set,
+// ordered by draw_number ascending. Limit caps the result count (0 = no limit).
+func (r *LotteryResultRepository) GetDrawsWithoutPrizes(ctx context.Context, limit int) ([]int, error) {
+	query := `SELECT draw_number FROM lottery_results WHERE prize_amounts IS NULL AND strong BETWEEN 1 AND 7 ORDER BY draw_date DESC`
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	log.Printf("Repository.GetDrawsWithoutPrizes: querying for draws with NULL prize_amounts (limit=%d)", limit)
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		log.Printf("Repository.GetDrawsWithoutPrizes: query failed: %v", err)
+		return nil, fmt.Errorf("failed to get draws without prizes: %w", err)
+	}
+	defer rows.Close()
+
+	var drawNumbers []int
+	for rows.Next() {
+		var dn int
+		if err := rows.Scan(&dn); err != nil {
+			log.Printf("Repository.GetDrawsWithoutPrizes: row scan failed: %v", err)
+			return nil, fmt.Errorf("failed to scan draw number: %w", err)
+		}
+		drawNumbers = append(drawNumbers, dn)
+	}
+	log.Printf("Repository.GetDrawsWithoutPrizes: found %d draws without prizes", len(drawNumbers))
+	return drawNumbers, nil
 }

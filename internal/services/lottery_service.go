@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"log"
-	"sort"
 	"time"
 
 	lotterytree "github.com/lihai1/stat-tree-server/internal/lottery-tree"
@@ -241,17 +240,9 @@ func (s *LotteryService) GetStatistics(ctx context.Context, req *lotteryv1.GetSt
 }
 
 // Analyze analyzes user-selected numbers against historical data.
-// Preserves the original algorithm behavior: builds the tree, analyzes the
-// form, and returns grouped frequency results.
-//
-// The tree's AnalyzeArray returns a 2D slice where:
-//   - results[0] = [BuildCalls] (metadata: archive size / build call count)
-//   - results[1:] = interleaved [num, count, num, count, ...] sequences
-//
-// Each sequence's length / 2 gives the group size (1=single, 2=pair, etc.).
-// We group sequences by size, extract the numbers (even indices) and the
-// occurrence count (last element), and build FrequencyGroup messages that
-// mirror the legacy ArraysFilter pipe output.
+// The tree builds the complete AnalyzeResponse during recursion, so this
+// method is a thin "load archive, strip strong, call tree, return" wrapper
+// — mirroring the legacy Java FormAnalyzeCalculations.runRequest().
 func (s *LotteryService) Analyze(ctx context.Context, req *lotteryv1.AnalyzeRequest) (*lotteryv1.AnalyzeResponse, error) {
 	from, to := windowFromProto(req.GetWindow())
 	la, _, err := s.loadArchive(ctx, from, to)
@@ -259,91 +250,10 @@ func (s *LotteryService) Analyze(ctx context.Context, req *lotteryv1.AnalyzeRequ
 		log.Printf("Analyze: failed to load archive: %v", err)
 	}
 
-	// Convert request numbers to int slice.
 	numbers := utils.Int32sToInts(req.GetForm())
-
-	// Defensive: if the form includes a trailing strong number (>6 regular
-	// numbers for lotto), drop the last element to match the legacy server
-	// behavior (FormAnalyzeCalculations.java used form.length-1).
-	// The UI already strips strong, but API callers may include it.
 	if len(numbers) > 6 {
-		numbers = numbers[:len(numbers)-1]
+		numbers = numbers[:len(numbers)-1] // strip trailing strong
 	}
 
-	// Build the lottery tree for analysis (original behavior used 6).
-	la.BuildTree(6)
-
-	// Analyze the form using the tree → 2D result array.
-	analysisResults := la.AnalyzeForm(numbers)
-
-	// Extract archive size from the metadata row (results[0] = [BuildCalls]).
-	archiveSize := int32(0)
-	if len(analysisResults) > 0 && len(analysisResults[0]) > 0 {
-		archiveSize = int32(analysisResults[0][0])
-	}
-
-	// Process frequency rows (results[1:]) and group by sequence length.
-	// Each row is [num1, count1, num2, count2, ...]; group size = len(row)/2.
-	groupMap := make(map[int][]*lotteryv1.FrequencyEntry)
-	for i := 1; i < len(analysisResults); i++ {
-		row := analysisResults[i]
-		if len(row) < 2 || len(row)%2 != 0 {
-			continue
-		}
-		groupSize := len(row) / 2
-
-		// Numbers are at even indices; count is the last element.
-		nums := make([]int32, 0, groupSize)
-		for j := 0; j < len(row)-1; j += 2 {
-			if row[j] > 0 {
-				nums = append(nums, int32(row[j]))
-			}
-		}
-		count := int32(row[len(row)-1])
-		if len(nums) == 0 {
-			continue
-		}
-
-		groupMap[groupSize] = append(groupMap[groupSize], &lotteryv1.FrequencyEntry{
-			Numbers: nums,
-			Count:   count,
-		})
-	}
-
-	// Build FrequencyGroup list for sizes 1–6, sorted by count descending.
-	frequencyGroups := make([]*lotteryv1.FrequencyGroup, 0, 6)
-	for size := 1; size <= 6; size++ {
-		entries := groupMap[size]
-		sort.SliceStable(entries, func(a, b int) bool {
-			return entries[a].GetCount() > entries[b].GetCount()
-		})
-		frequencyGroups = append(frequencyGroups, &lotteryv1.FrequencyGroup{
-			Size:    int32(size),
-			Combos:  int32(binomial(37, size)),
-			Entries: entries,
-		})
-	}
-
-	return &lotteryv1.AnalyzeResponse{
-		FrequencyGroups: frequencyGroups,
-		ArchiveSize:     archiveSize,
-	}, nil
-}
-
-// binomial returns C(n, k), the number of k-element combinations from an
-// n-element set. Used to compute the total possible combinations per group
-// size, matching the legacy sumCombinations helper.
-func binomial(n, k int) int {
-	if k < 0 || k > n {
-		return 0
-	}
-	if k == 0 || k == n {
-		return 1
-	}
-	k = min(k, n-k)
-	result := 1
-	for i := 0; i < k; i++ {
-		result = result * (n - i) / (i + 1)
-	}
-	return result
+	return la.AnalyzeForm(numbers), nil
 }

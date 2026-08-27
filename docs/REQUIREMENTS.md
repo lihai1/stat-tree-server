@@ -20,10 +20,22 @@ Derived from the actual codebase (`go.mod`, `internal/`, `db-migration/`,
 - **FR-4** `Analyze` — evaluate user-selected numbers against historical
   winning draws, returning grouped frequency results (one entry per group
   size 1–6) and the archive size used.
+- **FR-4a** `Simulate` — backtest a user's ticket (6/8/10/12-number systematic
+  forms) against every historical draw in an optional date window. For N > 6,
+  all C(N,6) combinations are played per draw. Returns per-draw results
+  (`SimulateDrawResult`: tier hits, prize won, ticket cost, `used_real_prizes`
+  badge) and an aggregated `SimulateSummary` (total draws, combinations, spend,
+  winnings, net, per-tier totals, draws priced with real scraped prizes).
+  Prize amounts use scraped per-draw `prize_amounts` when available, falling
+  back to service defaults or user-supplied overrides (`SimulateRequest.prize_amounts`).
 
 ### Scraper & Seeder
 - **FR-5** Scheduled scraper fetches fresh lottery draws from the Israeli
   lottery site (pais.co.il) on a cron schedule (default: `0 3 * * *`).
+- **FR-5a** Prize scraper populates the `prize_amounts` JSONB column on
+  `lottery_results` (per-tier ILS prizes per draw, length-8 array). Used by
+  `Simulate` for real per-draw prize data. Null when not yet fetched —
+  `Simulate` falls back to defaults or user overrides.
 - **FR-6** On first boot, if `lottery_results` is empty, seed from the
   `lotto.data` file (historical archive).
 - **FR-7** Scraper is fault-tolerant — logs errors and preserves existing
@@ -56,7 +68,8 @@ Derived from the actual codebase (`go.mod`, `internal/`, `db-migration/`,
 
 - **DATA-1** The service owns only the `lottery` PostgreSQL schema.
 - **DATA-2** Single table: `lottery_results` (id, draw_number, draw_date,
-  numbers INTEGER[], strong INTEGER, lottery_type, created_at, updated_at).
+  numbers INTEGER[], strong INTEGER, lottery_type, prize_amounts JSONB
+  (nullable, length-8 array of per-tier ILS prizes), created_at, updated_at).
 - **DATA-3** No user data, no saved forms — identity is owned by Keycloak,
   user app data by the Java BFF.
 - **DATA-4** Migrations managed by Liquibase, scoped to `currentSchema=lottery`.

@@ -23,6 +23,7 @@ const (
 	LotteryService_GenerateForm_FullMethodName  = "/lottery.v1.LotteryService/GenerateForm"
 	LotteryService_GetStatistics_FullMethodName = "/lottery.v1.LotteryService/GetStatistics"
 	LotteryService_Analyze_FullMethodName       = "/lottery.v1.LotteryService/Analyze"
+	LotteryService_Simulate_FullMethodName      = "/lottery.v1.LotteryService/Simulate"
 )
 
 // LotteryServiceClient is the client API for LotteryService service.
@@ -43,6 +44,11 @@ type LotteryServiceClient interface {
 	GetStatistics(ctx context.Context, in *GetStatisticsRequest, opts ...grpc.CallOption) (*GetStatisticsResponse, error)
 	// Analyze evaluates user-selected numbers against historical winning draws.
 	Analyze(ctx context.Context, in *AnalyzeRequest, opts ...grpc.CallOption) (*AnalyzeResponse, error)
+	// Simulate backtests a user's numbers against historical draws over a date
+	// window, computing ticket cost spent and prizes won per draw and in total.
+	// Supports systematic forms (6, 8, 10, 12 numbers) where all C(N,6)
+	// combinations are played per draw.
+	Simulate(ctx context.Context, in *SimulateRequest, opts ...grpc.CallOption) (*SimulateResponse, error)
 }
 
 type lotteryServiceClient struct {
@@ -93,6 +99,16 @@ func (c *lotteryServiceClient) Analyze(ctx context.Context, in *AnalyzeRequest, 
 	return out, nil
 }
 
+func (c *lotteryServiceClient) Simulate(ctx context.Context, in *SimulateRequest, opts ...grpc.CallOption) (*SimulateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SimulateResponse)
+	err := c.cc.Invoke(ctx, LotteryService_Simulate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LotteryServiceServer is the server API for LotteryService service.
 // All implementations must embed UnimplementedLotteryServiceServer
 // for forward compatibility.
@@ -111,6 +127,11 @@ type LotteryServiceServer interface {
 	GetStatistics(context.Context, *GetStatisticsRequest) (*GetStatisticsResponse, error)
 	// Analyze evaluates user-selected numbers against historical winning draws.
 	Analyze(context.Context, *AnalyzeRequest) (*AnalyzeResponse, error)
+	// Simulate backtests a user's numbers against historical draws over a date
+	// window, computing ticket cost spent and prizes won per draw and in total.
+	// Supports systematic forms (6, 8, 10, 12 numbers) where all C(N,6)
+	// combinations are played per draw.
+	Simulate(context.Context, *SimulateRequest) (*SimulateResponse, error)
 	mustEmbedUnimplementedLotteryServiceServer()
 }
 
@@ -132,6 +153,9 @@ func (UnimplementedLotteryServiceServer) GetStatistics(context.Context, *GetStat
 }
 func (UnimplementedLotteryServiceServer) Analyze(context.Context, *AnalyzeRequest) (*AnalyzeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Analyze not implemented")
+}
+func (UnimplementedLotteryServiceServer) Simulate(context.Context, *SimulateRequest) (*SimulateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Simulate not implemented")
 }
 func (UnimplementedLotteryServiceServer) mustEmbedUnimplementedLotteryServiceServer() {}
 func (UnimplementedLotteryServiceServer) testEmbeddedByValue()                        {}
@@ -226,6 +250,24 @@ func _LotteryService_Analyze_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LotteryService_Simulate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SimulateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LotteryServiceServer).Simulate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LotteryService_Simulate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LotteryServiceServer).Simulate(ctx, req.(*SimulateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // LotteryService_ServiceDesc is the grpc.ServiceDesc for LotteryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -248,6 +290,10 @@ var LotteryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Analyze",
 			Handler:    _LotteryService_Analyze_Handler,
+		},
+		{
+			MethodName: "Simulate",
+			Handler:    _LotteryService_Simulate_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

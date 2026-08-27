@@ -119,6 +119,40 @@
         ]
       }
     },
+    "/api/generate/simulate": {
+      "post": {
+        "summary": "Simulate backtests a user's numbers against historical draws over a date\nwindow, computing ticket cost spent and prizes won per draw and in total.\nSupports systematic forms (6, 8, 10, 12 numbers) where all C(N,6)\ncombinations are played per draw.",
+        "operationId": "LotteryService_Simulate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1SimulateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "SimulateRequest backtests a user's form against historical draws.\nThe form may contain 6, 8, 10, or 12 numbers (systematic forms).\nFor N \u003e 6, all C(N,6) combinations are played per draw.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1SimulateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "LotteryService"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "summary": "HealthCheck returns the health status of the service.",
@@ -397,6 +431,197 @@
         }
       },
       "description": "Pair is a frequent number group with its occurrence count."
+    },
+    "v1SimulateDrawResult": {
+      "type": "object",
+      "properties": {
+        "draw_number": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "draw_date": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "winning_numbers": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "winning_strong": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "tier_hits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1SimulateTierHit"
+          },
+          "description": "Prize tiers hit in this draw (may be multiple for systematic forms)."
+        },
+        "prize_won": {
+          "type": "number",
+          "format": "double",
+          "description": "Total prize won in this draw (ILS)."
+        },
+        "ticket_cost": {
+          "type": "number",
+          "format": "double",
+          "description": "Ticket cost for this draw (ILS)."
+        },
+        "used_real_prizes": {
+          "type": "boolean",
+          "description": "True when the prize amounts used for this draw came from the scraped\nper-draw prize data (lottery_results.prize_amounts). False when the\nservice fell back to default estimates or user-supplied overrides."
+        }
+      },
+      "description": "SimulateDrawResult is the simulation result for a single historical draw."
+    },
+    "v1SimulateRequest": {
+      "type": "object",
+      "properties": {
+        "form": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "description": "The user's selected numbers (6, 8, 10, or 12 for systematic forms)."
+        },
+        "strong": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The user's strong number (1-7). 0 = no strong number."
+        },
+        "window": {
+          "$ref": "#/definitions/v1DateWindow",
+          "description": "Optional historical window. Unset = full archive."
+        },
+        "ticket_cost": {
+          "type": "number",
+          "format": "double",
+          "description": "Ticket cost per table/combination in ILS. Default 3.0."
+        },
+        "prize_amounts": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "description": "User-configurable prize amounts per tier (ILS). If empty, service\ndefaults are used. Index 0 = tier 1 (6+strong), ..., 7 = tier 8 (3).\nMust be length 0 or 8."
+        }
+      },
+      "description": "SimulateRequest backtests a user's form against historical draws.\nThe form may contain 6, 8, 10, or 12 numbers (systematic forms).\nFor N \u003e 6, all C(N,6) combinations are played per draw."
+    },
+    "v1SimulateResponse": {
+      "type": "object",
+      "properties": {
+        "draws": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1SimulateDrawResult"
+          },
+          "description": "Per-draw results, ordered by draw_date ascending."
+        },
+        "summary": {
+          "$ref": "#/definitions/v1SimulateSummary"
+        }
+      },
+      "description": "SimulateResponse is the response from the Simulate RPC."
+    },
+    "v1SimulateSummary": {
+      "type": "object",
+      "properties": {
+        "total_draws": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "total_combinations": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "total_spent": {
+          "type": "number",
+          "format": "double"
+        },
+        "total_won": {
+          "type": "number",
+          "format": "double"
+        },
+        "net": {
+          "type": "number",
+          "format": "double",
+          "description": "Net profit/loss (total_won - total_spent) in ILS."
+        },
+        "tier_summaries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1SimulateTierSummary"
+          },
+          "description": "Per-tier summaries (always 8 entries, tiers 1-8)."
+        },
+        "draws_with_real_prizes": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of draws whose prize amounts came from scraped per-draw data\n(rather than default estimates or user overrides)."
+        }
+      },
+      "description": "SimulateSummary is the aggregated summary over all simulated draws."
+    },
+    "v1SimulateTierHit": {
+      "type": "object",
+      "properties": {
+        "tier": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Prize tier 1-8 (1 = 6+strong, 8 = 3 matches)."
+        },
+        "hits": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of combinations that hit this tier in this draw."
+        },
+        "amount_per_hit": {
+          "type": "number",
+          "format": "double",
+          "description": "Prize amount per hit (ILS)."
+        },
+        "total": {
+          "type": "number",
+          "format": "double",
+          "description": "Total prize for this tier in this draw (hits × amount_per_hit)."
+        }
+      },
+      "description": "SimulateTierHit records how many combinations hit a specific prize tier\nin a single draw."
+    },
+    "v1SimulateTierSummary": {
+      "type": "object",
+      "properties": {
+        "tier": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Prize tier 1-8."
+        },
+        "label": {
+          "type": "string",
+          "description": "Human-readable label (e.g. \"6+strong\", \"5\", \"3+strong\")."
+        },
+        "total_hits": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Total number of combinations that hit this tier across all draws."
+        },
+        "total_amount": {
+          "type": "number",
+          "format": "double",
+          "description": "Total prize amount for this tier across all draws (ILS)."
+        }
+      },
+      "description": "SimulateTierSummary is the aggregated summary for a single prize tier\nacross all simulated draws."
     },
     "v1Strength": {
       "type": "string",

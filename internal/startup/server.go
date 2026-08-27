@@ -40,11 +40,19 @@ func NewServer(cfg *config.Config) (*Server, error) {
 
 	// Seed lottery data on first boot if enabled and the table is empty.
 	if cfg.Scraper.SeedOnBoot {
+		log.Println("Startup: seed-on-boot enabled, seeding lottery data")
 		lotterySeeder := seeder.NewLotterySeeder(lotteryResultRepo)
 		if err := lotterySeeder.SeedLotteryData(context.Background()); err != nil {
 			log.Printf("Warning: Failed to seed lottery data: %v", err)
 			// Continue startup even if seeding fails — the scraper cron
 			// will retry.
+		}
+		// Best-effort prize-amount backfill on boot. Failures are logged
+		// but never block startup; the cron will retry on each tick.
+		log.Println("Startup: running initial prize-amount backfill (batchSize=50)")
+		prizeSeeder := seeder.NewPrizeSeeder(lotteryResultRepo)
+		if _, err := prizeSeeder.SeedMissingPrizes(context.Background(), 50); err != nil {
+			log.Printf("Warning: Initial prize backfill failed: %v", err)
 		}
 	}
 
@@ -85,6 +93,11 @@ func NewServer(cfg *config.Config) (*Server, error) {
 // startScraperScheduler runs a ticker that refreshes lottery_results on the
 // configured cron schedule. A simple daily/hourly ticker is used here; for
 // arbitrary cron expressions a library like robfig/cron would be needed.
+//
+// After each results refresh it also triggers a prize-amount backfill pass
+// that scrapes per-draw prize data from the pais.co.il individual draw pages
+// for any draws whose prize_amounts column is still NULL. The prize backfill
+// is best-effort and never aborts the results refresh.
 func (s *Server) startScraperScheduler(cronSpec string, repo *repository.LotteryResultRepository) {
 	interval := parseCronAsInterval(cronSpec)
 	if interval <= 0 {
@@ -98,6 +111,7 @@ func (s *Server) startScraperScheduler(cronSpec string, repo *repository.Lottery
 		defer ticker.Stop()
 
 		scraperClient := scraper.NewPaisScraper()
+		prizeSeeder := seeder.NewPrizeSeeder(repo)
 		refresh := func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
@@ -111,6 +125,15 @@ func (s *Server) startScraperScheduler(cronSpec string, repo *repository.Lottery
 				return
 			}
 			log.Printf("Scraper refreshed %d lottery results", len(results))
+
+			// Best-effort prize-amount backfill for draws still missing prizes.
+			prizeCtx, prizeCancel := context.WithTimeout(context.Background(), 90*time.Second)
+			defer prizeCancel()
+			if n, err := prizeSeeder.SeedMissingPrizes(prizeCtx, 50); err != nil {
+				log.Printf("Prize backfill failed: %v", err)
+			} else if n > 0 {
+				log.Printf("Prize backfill wrote %d draws", n)
+			}
 		}
 
 		for {

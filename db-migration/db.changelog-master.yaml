@@ -2,3 +2,6 @@ databaseChangeLog:
   - include:
       file: migrations/01-create-lottery-results-table.yaml
       relativeToChangelogFile: true
+  - include:
+      file: migrations/02-add-prize-amounts-column.yaml
+      relativeToChangelogFile: true

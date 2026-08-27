@@ -172,7 +172,7 @@ var _ = Describe("LotteryService", func() {
 				Expect(resp.GetFrequencyGroups()).To(HaveLen(6))
 			})
 
-			It("should populate group size and combos correctly", func() {
+			It("should populate group size correctly (combos computed by UI)", func() {
 				req := &lotteryv1.AnalyzeRequest{
 					Form: []int32{1, 2, 3, 4, 5, 6},
 				}
@@ -183,7 +183,9 @@ var _ = Describe("LotteryService", func() {
 				groups := resp.GetFrequencyGroups()
 				for i, g := range groups {
 					Expect(g.GetSize()).To(Equal(int32(i + 1)))
-					Expect(g.GetCombos()).To(BeNumerically(">", 0))
+					// Combos is 0 from the tree — the UI computes it via
+					// combinations(37, size) with a || fallback.
+					Expect(g.GetCombos()).To(Equal(int32(0)))
 				}
 			})
 

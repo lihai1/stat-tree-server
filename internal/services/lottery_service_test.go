@@ -17,7 +17,7 @@ var _ = Describe("LotteryService", func() {
 	)
 
 	BeforeEach(func() {
-		service = services.NewLotteryService(nil)
+		service = services.NewLotteryServiceWithRepo(nil)
 		ctx = context.Background()
 	})
 
@@ -144,6 +144,38 @@ var _ = Describe("LotteryService", func() {
 				Expect(resp).ToNot(BeNil())
 			})
 		})
+
+		Context("with form_type > 6 (rejected)", func() {
+			It("should reject form_type 7", func() {
+				req := &lotteryv1.GetStatisticsRequest{
+					HowMany:  10,
+					FormType: 7,
+				}
+
+				_, err := service.GetStatistics(ctx, req)
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should reject form_type 8", func() {
+				req := &lotteryv1.GetStatisticsRequest{
+					HowMany:  10,
+					FormType: 8,
+				}
+
+				_, err := service.GetStatistics(ctx, req)
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should accept form_type 6", func() {
+				req := &lotteryv1.GetStatisticsRequest{
+					HowMany:  10,
+					FormType: 6,
+				}
+
+				_, err := service.GetStatistics(ctx, req)
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
 	})
 
 	Describe("Analyze", func() {
@@ -212,21 +244,22 @@ var _ = Describe("LotteryService", func() {
 			})
 		})
 
-		Context("with form including a trailing strong number", func() {
-			It("should drop the last element when form has more than 6 numbers", func() {
-				// 7 numbers — the 7th is a strong number that should be dropped
+		Context("with form larger than six numbers (BUG 5 fix)", func() {
+			It("should analyze all numbers without dropping the last (BUG 5)", func() {
+				// 8 regular numbers — none should be stripped. The archive
+				// stores strong separately, so every form element is regular.
 				req := &lotteryv1.AnalyzeRequest{
-					Form: []int32{1, 2, 3, 4, 5, 6, 7},
+					Form: []int32{1, 2, 3, 4, 5, 6, 7, 8},
 				}
 
 				resp, err := service.Analyze(ctx, req)
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp).ToNot(BeNil())
-				// The analysis should succeed and return frequency groups
-				// as if only 6 numbers were analyzed.
 				Expect(resp.GetFrequencyGroups()).ToNot(BeNil())
 				Expect(len(resp.GetFrequencyGroups())).To(Equal(6))
+				// Without a DB the archive is empty, so entries are empty,
+				// but the call must succeed and not strip number 8.
 			})
 
 			It("should not drop when form has exactly 6 numbers", func() {

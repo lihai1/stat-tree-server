@@ -13,3 +13,13 @@ type LotteryResult struct {
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 }
+
+// DrawRef is a lightweight reference to a draw, carrying just the identity
+// (draw_number) and the draw_date. It is used by the scraper and prize
+// backfill to report which date range was affected by a write, so the
+// LotteryManager can invalidate only the overlapping cache windows instead
+// of clearing the whole cache.
+type DrawRef struct {
+	DrawNumber int
+	DrawDate   time.Time
+}

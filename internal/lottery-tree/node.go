@@ -61,24 +61,3 @@ func (n *LoNode) Build(form []int, current int, howMany int) {
 		}
 	}
 }
-
-// InTree checks if a sequence exists in the tree
-func (n *LoNode) InTree(data []int, idata int, current *LoNode, level int) bool {
-	if current == nil {
-		return false
-	}
-	if level == 0 {
-		return true
-	}
-
-	for i := idata; i < len(data); i++ {
-		treeIndex := data[i] - current.Num
-		if treeIndex >= 0 && treeIndex < len(current.Next) {
-			if current.Next[treeIndex] == nil {
-				return false
-			}
-			return current.Next[treeIndex].InTree(data, idata+1, current.Next[treeIndex], level-1)
-		}
-	}
-	return false
-}

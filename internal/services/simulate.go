@@ -50,23 +50,23 @@ var tierLabels = [8]string{
 // defaultTicketCost is the cost per table/combination in ILS.
 const defaultTicketCost = 3.0
 
-// minTables is the minimum number of tables per draw (2 for regular lotto).
-const minTables = 2
-
 // Simulate backtests a user's form against historical draws over a date window.
 // For systematic forms (N > 6 numbers), all C(N,6) combinations are played per
 // draw. For each draw, each combination is compared to the winning numbers to
 // determine the prize tier. Ticket cost and prize amounts are aggregated.
+//
+// The cost per draw uses the actual number of combinations played
+// (len(combinations)), not an artificial minimum. A six-number form has
+// exactly one combination, so its per-draw cost is one ticket, not two.
 func (s *LotteryService) Simulate(ctx context.Context, req *lotteryv1.SimulateRequest) (*lotteryv1.SimulateResponse, error) {
-	from, to := windowFromProto(req.GetWindow())
-	log.Printf("Simulate: START form=%v strong=%d from=%s to=%s",
-		req.GetForm(), req.GetStrong(), from.Format("2006-01-02"), to.Format("2006-01-02"))
-
-	_, results, err := s.loadArchive(ctx, from, to)
+	arch, err := s.archive(ctx, req.GetWindow())
 	if err != nil {
 		log.Printf("Simulate: failed to load archive: %v", err)
+		return nil, err
 	}
-	log.Printf("Simulate: loaded %d historical draws for date range", len(results))
+	results := arch.Draws
+	log.Printf("Simulate: START form=%v strong=%d draws=%d",
+		req.GetForm(), req.GetStrong(), len(results))
 
 	// Parse user form numbers.
 	form := make([]int, 0, len(req.GetForm()))
@@ -91,12 +91,11 @@ func (s *LotteryService) Simulate(ctx context.Context, req *lotteryv1.SimulateRe
 		form = form[:12]
 	}
 
-	// Generate all C(N,6) combinations.
+	// Generate all C(N,6) combinations and use the actual count for cost.
+	// A six-number form yields exactly one combination; a systematic form
+	// yields C(N,6). No artificial minimum is applied.
 	combinations := generateCombinations(form, 6)
 	numCombinations := len(combinations)
-	if numCombinations < minTables {
-		numCombinations = minTables
-	}
 	log.Printf("Simulate: form size=%d, combinations per draw=%d", n, numCombinations)
 
 	// Ticket cost per draw.

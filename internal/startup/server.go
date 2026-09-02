@@ -17,12 +17,14 @@ import (
 )
 
 // Server holds the server instances and dependencies.
-// The Go service is stateless beyond the lottery_results table: it owns no
-// user data and no saved forms (those moved to the Java BFF + Keycloak).
+// The Go service owns the LotteryManager archive cache; beyond that and the
+// lottery_results table it holds no user data and no saved forms (those moved
+// to the Java BFF + Keycloak).
 type Server struct {
 	grpcServer    *server.GRPCServer
 	gatewayServer *server.GatewayServer
 	db            *database.Database
+	manager       *services.LotteryManager
 	scraperStop   chan struct{}
 }
 
@@ -38,6 +40,11 @@ func NewServer(cfg *config.Config) (*Server, error) {
 	lotteryResultRepo := repository.NewLotteryResultRepository(db.Pool)
 	log.Println("Repositories initialized (lottery_results only)")
 
+	// The LotteryManager owns the LRU archive cache shared by every RPC.
+	// It is created before the seeder runs so the seed-on-boot path can
+	// invalidate it after writing.
+	manager := services.NewLotteryManager(lotteryResultRepo)
+
 	// Seed lottery data on first boot if enabled and the table is empty.
 	if cfg.Scraper.SeedOnBoot {
 		log.Println("Startup: seed-on-boot enabled, seeding lottery data")
@@ -47,18 +54,22 @@ func NewServer(cfg *config.Config) (*Server, error) {
 			// Continue startup even if seeding fails — the scraper cron
 			// will retry.
 		}
+		// A fresh seed wrote the whole table, so drop any cached archives
+		// that may have been built before the seed completed.
+		manager.InvalidateAll()
+
 		// Best-effort prize-amount backfill on boot. Failures are logged
 		// but never block startup; the cron will retry on each tick.
 		log.Println("Startup: running initial prize-amount backfill (batchSize=50)")
 		prizeSeeder := seeder.NewPrizeSeeder(lotteryResultRepo)
-		if _, err := prizeSeeder.SeedMissingPrizes(context.Background(), 50); err != nil {
+		if _, _, _, err := prizeSeeder.SeedMissingPrizes(context.Background(), 50); err != nil {
 			log.Printf("Warning: Initial prize backfill failed: %v", err)
 		}
 	}
 
-	// Initialize lottery service (algorithm + tree), wired to the
-	// lottery_results repository so each RPC can load the historical archive.
-	lotteryService := services.NewLotteryService(lotteryResultRepo)
+	// Initialize lottery service (algorithm + tree), wired to the shared
+	// archive cache manager.
+	lotteryService := services.NewLotteryService(manager)
 
 	// Create gRPC server.
 	grpcServer := server.NewGRPCServer(cfg.Server.GRPCPort, lotteryService)
@@ -77,12 +88,13 @@ func NewServer(cfg *config.Config) (*Server, error) {
 		grpcServer:    grpcServer,
 		gatewayServer: gatewayServer,
 		db:            db,
+		manager:       manager,
 		scraperStop:   make(chan struct{}),
 	}
 
 	// Start the scheduled scraper to refresh lottery_results from pais.co.il.
 	if cfg.Scraper.Cron != "" {
-		s.startScraperScheduler(cfg.Scraper.Cron, lotteryResultRepo)
+		s.startScraperScheduler(cfg.Scraper.Cron, lotteryResultRepo, manager)
 	} else {
 		log.Println("Scraper cron schedule is empty; skipping scheduled refresh")
 	}
@@ -94,11 +106,17 @@ func NewServer(cfg *config.Config) (*Server, error) {
 // configured cron schedule. A simple daily/hourly ticker is used here; for
 // arbitrary cron expressions a library like robfig/cron would be needed.
 //
-// After each results refresh it also triggers a prize-amount backfill pass
-// that scrapes per-draw prize data from the pais.co.il individual draw pages
-// for any draws whose prize_amounts column is still NULL. The prize backfill
-// is best-effort and never aborts the results refresh.
-func (s *Server) startScraperScheduler(cronSpec string, repo *repository.LotteryResultRepository) {
+// The scraper fetches the full upstream CSV but only inserts draws whose
+// draw_number is not already stored, so it does not rewrite the whole
+// history on every run. After inserting new draws it invalidates only the
+// cache windows whose date range overlaps the newly written draws.
+//
+// It then triggers a prize-amount backfill pass that scrapes per-draw prize
+// data from the pais.co.il individual draw pages for any draws whose
+// prize_amounts column is still NULL. The prize backfill is best-effort and
+// never aborts the results refresh. After prize writes it invalidates only
+// the cache windows overlapping the updated draws' dates.
+func (s *Server) startScraperScheduler(cronSpec string, repo *repository.LotteryResultRepository, manager *services.LotteryManager) {
 	interval := parseCronAsInterval(cronSpec)
 	if interval <= 0 {
 		log.Printf("Scraper schedule %q could not be parsed; skipping", cronSpec)
@@ -120,19 +138,31 @@ func (s *Server) startScraperScheduler(cronSpec string, repo *repository.Lottery
 				log.Printf("Scraper fetch failed: %v", err)
 				return
 			}
-			if err := repo.CreateBatch(ctx, results); err != nil {
+
+			// Insert only genuinely new draws; existing rows are untouched.
+			inserted, fromD, toD, err := repo.InsertNewDraws(ctx, results)
+			if err != nil {
 				log.Printf("Scraper persist failed: %v", err)
 				return
 			}
-			log.Printf("Scraper refreshed %d lottery results", len(results))
+			log.Printf("Scraper inserted %d new lottery results (of %d fetched)", inserted, len(results))
+
+			// Invalidate only cache windows overlapping the new draws.
+			if inserted > 0 {
+				manager.InvalidateRange(fromD, toD)
+			}
 
 			// Best-effort prize-amount backfill for draws still missing prizes.
 			prizeCtx, prizeCancel := context.WithTimeout(context.Background(), 90*time.Second)
 			defer prizeCancel()
-			if n, err := prizeSeeder.SeedMissingPrizes(prizeCtx, 50); err != nil {
+			written, pFrom, pTo, err := prizeSeeder.SeedMissingPrizes(prizeCtx, 50)
+			if err != nil {
 				log.Printf("Prize backfill failed: %v", err)
-			} else if n > 0 {
-				log.Printf("Prize backfill wrote %d draws", n)
+			} else if written > 0 {
+				log.Printf("Prize backfill wrote %d draws", written)
+				// Prize amounts feed the simulation, so invalidate windows
+				// overlapping the updated draws.
+				manager.InvalidateRange(pFrom, pTo)
 			}
 		}
 

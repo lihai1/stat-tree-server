@@ -11,7 +11,7 @@ import (
 
 var _ = Describe("HealthCheck", func() {
 	It("should return healthy status", func() {
-		service := services.NewLotteryService(nil)
+		service := services.NewLotteryServiceWithRepo(nil)
 		resp, err := service.HealthCheck(context.Background(), nil)
 
 		Expect(err).To(BeNil())

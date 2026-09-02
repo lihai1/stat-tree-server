@@ -1,16 +1,23 @@
 package lotterytree
 
-// LoTree represents the lottery tree structure
+import "sort"
+
+// LoTree is a prefix tree over sorted lottery draws. Each node at depth K
+// represents one K-number group, and its Count is how many archived draws
+// contain that group. Building it once therefore materialises every group
+// frequency the service needs: depth 1 gives single-number frequencies,
+// depth 2 pairs, depth 3 triples, and so on.
+//
+// A LoTree is immutable once Build returns, which is what allows a single
+// tree to be cached per date window and shared across concurrent requests.
 type LoTree struct {
 	Anchor     *LoNode
-	Node       *LoNode
 	Size       int
 	Lottery    int
-	Pares      [][]int
 	BuildCalls int
 }
 
-// NewLoTree creates a new lottery tree
+// NewLoTree creates a new lottery tree sized for the given number range.
 func NewLoTree(lottery int) *LoTree {
 	return &LoTree{
 		Lottery: lottery,
@@ -18,135 +25,67 @@ func NewLoTree(lottery int) *LoTree {
 	}
 }
 
-// Build builds the tree from data
+// Build inserts every draw in data into the tree, recording group counts up
+// to howMany levels deep. It returns the receiver so callers can chain.
 func (t *LoTree) Build(data [][]int, howMany int) *LoTree {
 	for i := 0; i < len(data); i++ {
 		t.Anchor.Build(data[i], 0, howMany)
 	}
 	t.BuildCalls = len(data)
-	return &LoTree{Anchor: t.Anchor}
+	return t
 }
 
-// InTree checks if data exists in the tree
-func (t *LoTree) InTree(data []int) bool {
-	return t.Anchor.InTree(data, 0, t.Anchor, len(data))
+// NodeEntry is one number group and how many archived draws contain it.
+type NodeEntry struct {
+	Numbers []int
+	Count   int
 }
 
-// NodesInTree counts total nodes in the tree
-func (t *LoTree) NodesInTree() int {
-	return t.nodesInTree(t.Anchor)
-}
-
-func (t *LoTree) nodesInTree(current *LoNode) int {
-	if current == nil {
-		return 0
-	}
-	sum := 1
-	for i := 0; i < len(current.Next); i++ {
-		sum += t.nodesInTree(current.Next[i])
-	}
-	return sum
-}
-
-// NodesInLevel counts nodes at a specific level
-func (t *LoTree) NodesInLevel(level int) int {
-	return t.nodesInLevel(t.Anchor, level)
-}
-
-func (t *LoTree) nodesInLevel(current *LoNode, level int) int {
-	if current == nil {
-		return 0
-	}
-	if level == 0 {
-		return 1
-	}
-	sum := 0
-	for i := 0; i < len(current.Next); i++ {
-		sum += t.nodesInLevel(current.Next[i], level-1)
-	}
-	return sum
-}
-
-// BestPares finds the best pairs based on strength
-func (t *LoTree) BestPares(sumOfPares int, howMany int, weakStrong string) [][]int {
-	t.Pares = make([][]int, sumOfPares)
-	for i := range t.Pares {
-		t.Pares[i] = make([]int, howMany+1)
-	}
-	
-	newPares := make([][]int, sumOfPares)
-	for i := range newPares {
-		newPares[i] = make([]int, howMany+1)
-	}
-	
-	for j := 0; j < sumOfPares; j++ {
-		if t.Pares[j][0] == 0 {
-			ans := t.bestPares(t.Anchor, howMany, weakStrong)
-			if ans != nil {
-				newPares[j][howMany] = ans.Count
-				for i := howMany - 1; i >= 0 && ans != nil; i-- {
-					t.Pares[j][i] = ans.Num
-					newPares[j][i] = ans.Num
-					ans = ans.Prev
-				}
-			}
-		}
-	}
-	return newPares
-}
-
-func (t *LoTree) bestPares(current *LoNode, howMany int, weakStrong string) *LoNode {
-	if howMany == 0 || current == nil {
-		return current
-	}
-	
-	ans := &LoNode{Num: 0, Count: -1}
-	if weakStrong == "weak" {
-		ans.Count = 2147483647 // Max int
-	}
-	
-	for i := current.Num; i < t.Lottery && i < len(current.Next)+current.Num; i++ {
-		treeIndex := i - current.Num
-		if treeIndex >= 0 && treeIndex < len(current.Next) {
-			pos := t.bestPares(current.Next[treeIndex], howMany-1, weakStrong)
-			if pos != nil && !t.exist(pos) {
-				if weakStrong == "strong" && ans.Count < pos.Count {
-					ans = pos
-				} else if weakStrong == "weak" && ans.Count > pos.Count {
-					ans = pos
-				}
-			}
-		}
-	}
-	
-	if ans.Num == 0 {
+// CollectNodes walks the tree once and returns every group of exactly the
+// given size together with its occurrence count, ordered by count. Mode
+// "weak" orders least-frequent first; any other mode orders most-frequent
+// first. Ordering is stable, so groups with equal counts keep their natural
+// ascending-number order.
+//
+// This replaces the former BestPares, which re-traversed the whole tree once
+// per requested group and mutated tree state to deduplicate. A single pass
+// plus a sort yields the same information without touching the tree.
+func (t *LoTree) CollectNodes(size int, mode string) []NodeEntry {
+	if size <= 0 || t.Anchor == nil {
 		return nil
 	}
-	return ans
+
+	var entries []NodeEntry
+	for _, child := range t.Anchor.Next {
+		if child != nil {
+			child.collectNodes(size-1, nil, &entries)
+		}
+	}
+
+	sort.SliceStable(entries, func(a, b int) bool {
+		if mode == string(Weak) {
+			return entries[a].Count < entries[b].Count
+		}
+		return entries[a].Count > entries[b].Count
+	})
+	return entries
 }
 
-func (t *LoTree) exist(current *LoNode) bool {
-	if t.Lottery < 10 {
-		return false
+// collectNodes appends this node's group when the remaining depth is
+// exhausted, otherwise recurses into its children. prefix holds the numbers
+// chosen above this node and is copied per entry, so no caller shares state.
+func (n *LoNode) collectNodes(remaining int, prefix []int, out *[]NodeEntry) {
+	numbers := make([]int, len(prefix)+1)
+	copy(numbers, prefix)
+	numbers[len(prefix)] = n.Num
+
+	if remaining == 0 {
+		*out = append(*out, NodeEntry{Numbers: numbers, Count: n.Count})
+		return
 	}
-	
-	for j := 0; j < len(t.Pares); j++ {
-		test := current
-		flag := true
-		for i := len(t.Pares[0]) - 2; i >= 0 && flag; i-- {
-			if t.Pares[j][i] == test.Num {
-				flag = true
-			} else {
-				flag = false
-				i = -1
-			}
-			if test != nil {
-				test = test.Prev
-			}
-		}
-		if flag {
-			return true
+	for _, child := range n.Next {
+		if child != nil {
+			child.collectNodes(remaining-1, numbers, out)
 		}
 	}
-	return false
 }

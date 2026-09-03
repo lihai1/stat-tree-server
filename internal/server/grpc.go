@@ -2,10 +2,10 @@ package server
 
 import (
 	"fmt"
-	"log"
-	"net"
 	"github.com/lihai1/stat-tree-server/internal/services"
 	lotteryv1 "github.com/lihai1/stat-tree-server/pkg/gen"
+	"log"
+	"net"
 
 	"google.golang.org/grpc"
 )

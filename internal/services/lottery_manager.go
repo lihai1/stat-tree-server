@@ -43,12 +43,12 @@ type LotteryManager struct {
 }
 
 type cacheEntry struct {
-	key    string
-	from   time.Time
-	to     time.Time
-	arch   *lotterytree.LotteryArchive
-	prev   *cacheEntry
-	next   *cacheEntry
+	key  string
+	from time.Time
+	to   time.Time
+	arch *lotterytree.LotteryArchive
+	prev *cacheEntry
+	next *cacheEntry
 
 	// load coordinates concurrent construction for the same key. A non-nil
 	// done channel means a load is in flight; the waiters read the result

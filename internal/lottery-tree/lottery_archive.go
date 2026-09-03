@@ -79,8 +79,9 @@ func NewLotteryArchive(lottery LotteryType, from, to time.Time, draws []models.L
 }
 
 // maxStrong is the highest valid strong number in the current game. The
-// strong tree is sized slightly larger because the archive also contains
-// historical draws whose strong number exceeded this range.
+// strong tree is sized exactly to this range; any CSV value outside 1..7
+// is from the pre-2004 6/49 format (a 7th regular number, not a strong)
+// or a data error, and is silently dropped by the tree's bounds check.
 const maxStrong = 7
 
 // MaxNumber returns the highest regular number this lottery variant draws.

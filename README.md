@@ -171,15 +171,18 @@ go build -o stat-tree-server cmd/server/main.go
 
 - `GET /health` - Health check endpoint
 - `POST /api/generate/form` - Generate lottery number combinations
-- `POST /api/generate/statistics` - Get statistics on number pairs
-- `POST /api/generate/analyze` - Analyze user-selected numbers
+- `POST /api/generate/pares` - Get statistics on number pairs/groups (form_type ≤ 6)
+- `POST /api/generate/analyze` - Analyze user-selected numbers (all treated as regulars)
+- `POST /api/generate/simulate` - Backtest a ticket against historical draws
 
 ### gRPC Services
 
 The server exposes gRPC services defined in `proto/lottery.proto`:
-- `GenerateForm` - Generate lottery number combinations
-- `GetStatistics` - Calculate statistics for number pairs
-- `Analyze` - Analyze user-selected numbers against historical data
+- `HealthCheck` - Service status and draw count
+- `GenerateForm` - Generate lottery number combinations (strong number appended)
+- `GetStatistics` - Calculate statistics for number pairs/groups (form_type ≤ 6)
+- `Analyze` - Analyze user-selected numbers against historical data (all regulars)
+- `Simulate` - Backtest a ticket against every historical draw in a date window
 
 ## Configuration
 
@@ -216,6 +219,9 @@ LOTTERY_SEED_ON_BOOT=true
 The backend follows a clean architecture pattern with clear separation of concerns:
 
 - **Services**: Business logic and gRPC service implementations
+- **LotteryManager**: LRU archive cache (max 8 entries, lazy construction, single-flight, range-scoped invalidation)
+- **LotteryArchive**: Immutable, cached archive owning prefix trees and winning-combo hash set (read-only, concurrent-safe)
+- **FormGenerator**: Request-scoped mutable generation state (tries, seen, results)
 - **Handlers**: HTTP request/response handling (REST endpoints)
 - **Middleware**: Cross-cutting concerns (CORS, logging, authentication)
 - **Models**: Data structures and domain models
@@ -229,9 +235,10 @@ The application is designed to be stateless and scalable:
 - REST API for external client access via gRPC-Gateway
 - Connection pooling for database access
 - Keycloak JWT validation (stateless, RS256 via JWKS) as defense-in-depth
-- Scheduled scraper refreshing lottery_results from pais.co.il
+- Scheduled scraper refreshing lottery_results from pais.co.il (insert-only, range-scoped cache invalidation)
 - Protocol Buffers for efficient serialization
 - Liquibase for database schema management (lottery schema only)
+- Archive cached per date window (default start: 2004-02-12, current Lotto format 1–37)
 
 ## Database
 
@@ -246,6 +253,7 @@ The application uses PostgreSQL (shared instance, `lottery` schema) with one tab
   - `numbers` (INTEGER[])
   - `strong` (INTEGER)
   - `lottery_type` (default: 'lotto')
+  - `prize_amounts` (JSONB, nullable — length-8 array of per-tier ILS prizes)
   - `created_at`, `updated_at`
 
 > **Note**: User accounts and saved forms are owned by the Java BFF (`app`
@@ -276,7 +284,11 @@ Migrations are located in the `db-migration/` directory and are automatically ap
 
 The application uses the repository pattern for data access:
 
-- **LotteryResultRepository**: CRUD operations for lottery results
+- **LotteryResultRepository**: CRUD operations for lottery results, including:
+  - `GetByDateRange` — fetch draws in a date window (used by `LotteryManager`)
+  - `InsertNewDraws` — insert-only with ON CONFLICT DO NOTHING, returns affected date range
+  - `UpdatePrizeAmounts` — update prize data for a draw, returns the draw date
+  - `GetDrawsWithoutPrizeRefs` — returns draw number/date pairs missing prize data
 
 > UserRepository and SavedFormRepository have been removed — user data is
 > owned by the Java BFF and Keycloak.

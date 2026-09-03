@@ -24,13 +24,12 @@ The orchestrator repo's `make proto-go` runs this inside the container.
 - `internal/config/` — env-based config struct.
 - `internal/database/` — pgxpool connection, sets `search_path=lottery`.
 - `internal/lottery-tree/` — **core algorithm, do not modify unless explicitly required.**
-  Files: `types.go`, `node.go`, `tree.go`, `list.go`, `lottery_array.go`.
+  Files: `types.go`, `node.go`, `tree.go`, `lottery_archive.go`, `form_generator.go`.
   See `internal/lottery-tree/README.md` for algorithm docs.
 - `internal/repository/` — `lottery_result_repository.go`, pgx data access.
 - `internal/scraper/` — `pais_scraper.go`, downloads CSV from pais.co.il.
 - `internal/seeder/` — `lottery_seeder.go`, seeds DB on first boot if empty; `prize_seeder.go`, populates `prize_amounts`.
-- `internal/services/` — `lottery_service.go`, gRPC service impl; `simulate.go`, Simulate backtest logic. Stateless: archive
-  loaded fresh per RPC.
+- `internal/services/` — `lottery_service.go`, gRPC service impl; `simulate.go`, Simulate backtest logic; `lottery_manager.go`, LRU archive cache. Archive is cached per date window and shared across RPCs.
 - `internal/server/` — `grpc.go` (gRPC server), `gateway.go` (REST gateway + swagger).
 - `internal/middleware/` — `auth.go` (JWT validation), `logging.go`.
 - `internal/startup/` — `server.go`, wiring + scraper cron scheduler.
@@ -60,13 +59,17 @@ already validates at edge). `/health` is always open.
 ## Scraper
 
 - `internal/scraper/pais_scraper.go` — downloads CSV from pais.co.il (external site).
-- Cron in `startup/server.go:startScraperScheduler` (lines 88-125).
+- Cron in `startup/server.go:startScraperScheduler`.
 - `LOTTERY_SCRAPER_CRON` (default `0 3 * * *` = daily 03:00).
-- Cron parser is a simple custom one (startup/server.go:130-142): supports daily,
-  hourly, 15-min only. For complex cron, integrate `robfig/cron` — do not extend the
-  hand-rolled parser.
-- On boot: if `LOTTERY_SEED_ON_BOOT=true` and table empty, runs once. Scraper failures
-  are logged but do NOT stop startup.
+- Cron parser is a simple custom one: supports daily, hourly, 15-min only. For complex
+  cron, integrate `robfig/cron` — do not extend the hand-rolled parser.
+- On boot: if `LOTTERY_SEED_ON_BOOT=true` and table empty, seeds from `lotto.data`.
+  Scraper failures are logged but do NOT stop startup.
+- Scraper inserts only new draws via `InsertNewDraws` (ON CONFLICT DO NOTHING) instead
+  of upserting the full CSV every run. Cache invalidation is range-scoped: only
+  archive windows overlapping the affected draw dates are cleared.
+- Prize backfill (`prize_seeder.go`) runs best-effort on startup and reports the
+  affected date range so the manager can invalidate only overlapping windows.
 
 ## Config (env vars)
 
@@ -82,7 +85,12 @@ See `.env.example`.
 - Errors wrapped with `fmt.Errorf("...: %w", err)`.
 - Logging: stdlib `log` (no structured logging).
 - Repository pattern: services = business logic, repositories = data access.
-- Stateless: archive loaded fresh per RPC call.
+- Archive cached per date window via `LotteryManager` (LRU, max 8 entries, lazy
+  construction, single-flight on concurrent misses). The archive (`LotteryArchive`)
+  is immutable after construction and safe for concurrent read-only use.
+- Default archive start date: `2004-02-12` (current Israeli Lotto format, numbers 1–37).
+- `GetStatistics` rejects `form_type > 6` (the tree is built through depth 6).
+- `Analyze` treats all supplied numbers as regular numbers — no trailing strong-number stripping.
 
 ## Gotchas
 
@@ -90,5 +98,6 @@ See `.env.example`.
   Imports use the module path, not the dir name.
 - `pkg/gen/` is generated — never edit by hand. Run `make proto`.
 - Scraper depends on pais.co.il being reachable; seeder fetches live, not from a local file.
-- Lottery-tree package has ~25% test coverage — be careful when touching it.
+- Lottery-tree package files `list.go` and `lottery_array.go` have been deleted.
+  Use `LotteryArchive` + `FormGenerator` instead.
 - `db-migration/` uses Liquibase (YAML), not Flyway. Don't confuse with Java service.

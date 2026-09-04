@@ -173,19 +173,32 @@ message HealthCheckResponse {
 // SimulateRequest backtests a user's form against historical draws.
 // The form may contain 6, 8, 10, or 12 numbers (systematic forms).
 // For N > 6, all C(N,6) combinations are played per draw.
+//
+// Two date windows are supported:
+//   - archive_window: the historical-draw range used as context (the
+//     archive that is loaded). Unset = full archive.
+//   - simulate_window: the sub-range of draws to actually backtest the
+//     user's numbers against. If unset, falls back to archive_window
+//     (preserving the legacy single-window behavior).
+// This enables a train/test split: study patterns over archive_window,
+// then backtest the chosen numbers over simulate_window.
 message SimulateRequest {
   // The user's selected numbers (6, 8, 10, or 12 for systematic forms).
   repeated int32 form = 1;
   // The user's strong number (1-7). 0 = no strong number.
   int32 strong = 2;
-  // Optional historical window. Unset = full archive.
-  DateWindow window = 3;
+  // The archive window (historical context). Unset = full archive.
+  // Renamed from "window" (field number unchanged → wire-compatible).
+  DateWindow archive_window = 3;
   // Ticket cost per table/combination in ILS. Default 3.0.
   double ticket_cost = 4;
   // User-configurable prize amounts per tier (ILS). If empty, service
   // defaults are used. Index 0 = tier 1 (6+strong), ..., 7 = tier 8 (3).
   // Must be length 0 or 8.
   repeated double prize_amounts = 5;
+  // The backtest window — draws to actually simulate against. If unset,
+  // falls back to archive_window (legacy single-window behavior).
+  DateWindow simulate_window = 6;
 }
 
 // SimulateTierHit records how many combinations hit a specific prize tier

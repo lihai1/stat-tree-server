@@ -140,7 +140,7 @@
         "parameters": [
           {
             "name": "body",
-            "description": "SimulateRequest backtests a user's form against historical draws.\nThe form may contain 6, 8, 10, or 12 numbers (systematic forms).\nFor N \u003e 6, all C(N,6) combinations are played per draw.",
+            "description": "SimulateRequest backtests a user's form against historical draws.\nThe form may contain 6, 8, 10, or 12 numbers (systematic forms).\nFor N \u003e 6, all C(N,6) combinations are played per draw.\n\nTwo date windows are supported:\n  - archive_window: the historical-draw range used as context (the\n    archive that is loaded). Unset = full archive.\n  - simulate_window: the sub-range of draws to actually backtest the\n    user's numbers against. If unset, falls back to archive_window\n    (preserving the legacy single-window behavior).\nThis enables a train/test split: study patterns over archive_window,\nthen backtest the chosen numbers over simulate_window.",
             "in": "body",
             "required": true,
             "schema": {
@@ -495,9 +495,9 @@
           "format": "int32",
           "description": "The user's strong number (1-7). 0 = no strong number."
         },
-        "window": {
+        "archive_window": {
           "$ref": "#/definitions/v1DateWindow",
-          "description": "Optional historical window. Unset = full archive."
+          "description": "The archive window (historical context). Unset = full archive.\nRenamed from \"window\" (field number unchanged → wire-compatible)."
         },
         "ticket_cost": {
           "type": "number",
@@ -511,9 +511,13 @@
             "format": "double"
           },
           "description": "User-configurable prize amounts per tier (ILS). If empty, service\ndefaults are used. Index 0 = tier 1 (6+strong), ..., 7 = tier 8 (3).\nMust be length 0 or 8."
+        },
+        "simulate_window": {
+          "$ref": "#/definitions/v1DateWindow",
+          "description": "The backtest window — draws to actually simulate against. If unset,\nfalls back to archive_window (legacy single-window behavior)."
         }
       },
-      "description": "SimulateRequest backtests a user's form against historical draws.\nThe form may contain 6, 8, 10, or 12 numbers (systematic forms).\nFor N \u003e 6, all C(N,6) combinations are played per draw."
+      "description": "SimulateRequest backtests a user's form against historical draws.\nThe form may contain 6, 8, 10, or 12 numbers (systematic forms).\nFor N \u003e 6, all C(N,6) combinations are played per draw.\n\nTwo date windows are supported:\n  - archive_window: the historical-draw range used as context (the\n    archive that is loaded). Unset = full archive.\n  - simulate_window: the sub-range of draws to actually backtest the\n    user's numbers against. If unset, falls back to archive_window\n    (preserving the legacy single-window behavior).\nThis enables a train/test split: study patterns over archive_window,\nthen backtest the chosen numbers over simulate_window."
     },
     "v1SimulateResponse": {
       "type": "object",

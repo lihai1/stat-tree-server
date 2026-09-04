@@ -55,18 +55,31 @@ const defaultTicketCost = 3.0
 // draw. For each draw, each combination is compared to the winning numbers to
 // determine the prize tier. Ticket cost and prize amounts are aggregated.
 //
+// Two date windows are honored:
+//   - archive_window: the historical-draw range loaded from the archive.
+//   - simulate_window: the sub-range of those draws to actually backtest
+//     against. If unset, falls back to archive_window (legacy behavior).
+//
 // The cost per draw uses the actual number of combinations played
 // (len(combinations)), not an artificial minimum. A six-number form has
 // exactly one combination, so its per-draw cost is one ticket, not two.
 func (s *LotteryService) Simulate(ctx context.Context, req *lotteryv1.SimulateRequest) (*lotteryv1.SimulateResponse, error) {
-	arch, err := s.archive(ctx, req.GetWindow())
+	arch, err := s.archive(ctx, req.GetArchiveWindow())
 	if err != nil {
 		log.Printf("Simulate: failed to load archive: %v", err)
 		return nil, err
 	}
+
+	// Resolve the backtest window. If simulate_window is unset, fall back
+	// to the archive window (preserving the legacy single-window behavior).
 	results := arch.Draws
-	log.Printf("Simulate: START form=%v strong=%d draws=%d",
-		req.GetForm(), req.GetStrong(), len(results))
+	simFrom, simTo := windowFromProto(req.GetSimulateWindow())
+	if req.GetSimulateWindow() != nil {
+		results = filterDrawsByWindow(results, simFrom, simTo)
+	}
+
+	log.Printf("Simulate: START form=%v strong=%d archiveDraws=%d simulateDraws=%d",
+		req.GetForm(), req.GetStrong(), len(arch.Draws), len(results))
 
 	// Parse user form numbers.
 	form := make([]int, 0, len(req.GetForm()))
@@ -364,4 +377,24 @@ func utilsIntsToInt32s(in []int) []int32 {
 // timestampProto converts a time.Time to a google.protobuf.Timestamp.
 func timestampProto(t time.Time) *timestamppb.Timestamp {
 	return timestamppb.New(t)
+}
+
+// filterDrawsByWindow returns the draws whose DrawDate falls within [from, to].
+// A zero from/to means "open bound" (no lower/upper limit). Draws on the
+// boundary day are inclusive. The input slice is not mutated.
+func filterDrawsByWindow(draws []models.LotteryResult, from, to time.Time) []models.LotteryResult {
+	if from.IsZero() && to.IsZero() {
+		return draws
+	}
+	filtered := make([]models.LotteryResult, 0, len(draws))
+	for _, d := range draws {
+		if !from.IsZero() && d.DrawDate.Before(from) {
+			continue
+		}
+		if !to.IsZero() && d.DrawDate.After(to) {
+			continue
+		}
+		filtered = append(filtered, d)
+	}
+	return filtered
 }

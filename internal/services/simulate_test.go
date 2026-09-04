@@ -2,9 +2,11 @@ package services_test
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/lihai1/stat-tree-server/internal/services"
 	lotteryv1 "github.com/lihai1/stat-tree-server/pkg/gen"
@@ -155,6 +157,56 @@ var _ = Describe("Simulate", func() {
 			// With 0 draws, totalCombinations is 0, but the call must
 			// succeed without error (the old minTables floor did not
 			// affect 28-combination forms anyway).
+			Expect(resp).ToNot(BeNil())
+		})
+	})
+
+	Describe("date windows", func() {
+		It("should accept archive_window (renamed from window)", func() {
+			req := &lotteryv1.SimulateRequest{
+				Form:          []int32{1, 2, 3, 4, 5, 6},
+				Strong:        1,
+				ArchiveWindow: &lotteryv1.DateWindow{},
+			}
+
+			resp, err := service.Simulate(ctx, req)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resp).ToNot(BeNil())
+		})
+
+		It("should accept simulate_window without error", func() {
+			req := &lotteryv1.SimulateRequest{
+				Form:   []int32{1, 2, 3, 4, 5, 6},
+				Strong: 1,
+				SimulateWindow: &lotteryv1.DateWindow{
+					From: timestamppb.New(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)),
+					To:   timestamppb.New(time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)),
+				},
+			}
+
+			resp, err := service.Simulate(ctx, req)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resp).ToNot(BeNil())
+			// No draws in the nil-repo archive → 0 draws simulated.
+			Expect(resp.GetSummary().GetTotalDraws()).To(Equal(int32(0)))
+		})
+
+		It("should fall back to archive_window when simulate_window is unset", func() {
+			// Legacy single-window behavior: only archive_window set.
+			req := &lotteryv1.SimulateRequest{
+				Form:   []int32{1, 2, 3, 4, 5, 6},
+				Strong: 1,
+				ArchiveWindow: &lotteryv1.DateWindow{
+					From: timestamppb.New(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)),
+					To:   timestamppb.New(time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)),
+				},
+			}
+
+			resp, err := service.Simulate(ctx, req)
+
+			Expect(err).ToNot(HaveOccurred())
 			Expect(resp).ToNot(BeNil())
 		})
 	})

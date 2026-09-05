@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"time"
 
 	lotterytree "github.com/lihai1/stat-tree-server/internal/lottery-tree"
@@ -105,7 +105,7 @@ func (s *LotteryService) GenerateForm(ctx context.Context, req *lotteryv1.Genera
 
 	arch, err := s.archive(ctx, req.GetWindow())
 	if err != nil {
-		log.Printf("GenerateForm: failed to load archive: %v", err)
+		slog.Warn("GenerateForm: failed to load archive", "error", err)
 		return nil, err
 	}
 
@@ -154,7 +154,7 @@ func (s *LotteryService) GetStatistics(ctx context.Context, req *lotteryv1.GetSt
 
 	arch, err := s.archive(ctx, req.GetWindow())
 	if err != nil {
-		log.Printf("GetStatistics: failed to load archive: %v", err)
+		slog.Warn("GetStatistics: failed to load archive", "error", err)
 		return nil, err
 	}
 
@@ -184,7 +184,7 @@ func (s *LotteryService) GetStatistics(ctx context.Context, req *lotteryv1.GetSt
 func (s *LotteryService) Analyze(ctx context.Context, req *lotteryv1.AnalyzeRequest) (*lotteryv1.AnalyzeResponse, error) {
 	arch, err := s.archive(ctx, req.GetWindow())
 	if err != nil {
-		log.Printf("Analyze: failed to load archive: %v", err)
+		slog.Warn("Analyze: failed to load archive", "error", err)
 		return nil, err
 	}
 

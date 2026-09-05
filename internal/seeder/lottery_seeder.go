@@ -2,7 +2,7 @@ package seeder
 
 import (
 	"context"
-	"log"
+	"log/slog"
 
 	"github.com/lihai1/stat-tree-server/internal/repository"
 	"github.com/lihai1/stat-tree-server/internal/scraper"
@@ -22,7 +22,7 @@ func NewLotterySeeder(lotteryRepo *repository.LotteryResultRepository) *LotteryS
 
 // SeedLotteryData fetches lottery data from pais.co.il and seeds the database
 func (ls *LotterySeeder) SeedLotteryData(ctx context.Context) error {
-	log.Println("Starting lottery data seeding...")
+	slog.Info("starting lottery data seeding...")
 
 	// Check if we already have data
 	count, err := ls.lotteryRepo.Count(ctx)
@@ -31,48 +31,48 @@ func (ls *LotterySeeder) SeedLotteryData(ctx context.Context) error {
 	}
 
 	if count > 0 {
-		log.Printf("Database already contains %d lottery results. Skipping seed.", count)
+		slog.Info("database already contains lottery results, skipping seed", "count", count)
 		return nil
 	}
 
 	// Fetch data from pais.co.il
-	log.Println("Fetching lottery data from pais.co.il...")
+	slog.Info("fetching lottery data from pais.co.il...")
 	results, err := ls.scraper.FetchLotteryData()
 	if err != nil {
 		return err
 	}
 
-	log.Printf("Fetched %d lottery results from pais.co.il", len(results))
+	slog.Info("fetched lottery results from pais.co.il", "count", len(results))
 
 	// Insert into database
-	log.Println("Inserting lottery results into database...")
+	slog.Info("inserting lottery results into database...")
 	if err := ls.lotteryRepo.CreateBatch(ctx, results); err != nil {
 		return err
 	}
 
-	log.Printf("Successfully seeded %d lottery results", len(results))
+	slog.Info("successfully seeded lottery results", "count", len(results))
 	return nil
 }
 
 // ForceSeedLotteryData forces a re-seed of lottery data (even if data exists)
 func (ls *LotterySeeder) ForceSeedLotteryData(ctx context.Context) error {
-	log.Println("Force seeding lottery data...")
+	slog.Info("force seeding lottery data...")
 
 	// Fetch data from pais.co.il
-	log.Println("Fetching lottery data from pais.co.il...")
+	slog.Info("fetching lottery data from pais.co.il...")
 	results, err := ls.scraper.FetchLotteryData()
 	if err != nil {
 		return err
 	}
 
-	log.Printf("Fetched %d lottery results from pais.co.il", len(results))
+	slog.Info("fetched lottery results from pais.co.il", "count", len(results))
 
 	// Insert into database (will update existing records)
-	log.Println("Inserting lottery results into database...")
+	slog.Info("inserting lottery results into database...")
 	if err := ls.lotteryRepo.CreateBatch(ctx, results); err != nil {
 		return err
 	}
 
-	log.Printf("Successfully seeded %d lottery results", len(results))
+	slog.Info("successfully seeded lottery results", "count", len(results))
 	return nil
 }

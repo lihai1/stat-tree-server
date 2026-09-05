@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,21 +11,28 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
+
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		slog.Error("Failed to load config", "error", err)
+		os.Exit(1)
 	}
 
 	server, err := startup.NewServer(cfg)
 	if err != nil {
-		log.Fatalf("Failed to create server: %v", err)
+		slog.Error("Failed to create server", "error", err)
+		os.Exit(1)
 	}
 
 	if err := server.Start(); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		slog.Error("Failed to start server", "error", err)
+		os.Exit(1)
 	}
 
-	log.Printf("Servers started - gRPC on port %s, REST on port %s", cfg.Server.GRPCPort, cfg.Server.GatewayPort)
+	slog.Info("servers started", "grpc_port", cfg.Server.GRPCPort, "rest_port", cfg.Server.GatewayPort)
 
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
@@ -33,6 +40,7 @@ func main() {
 	<-quit
 
 	if err := server.Stop(); err != nil {
-		log.Fatalf("Server shutdown error: %v", err)
+		slog.Error("Server shutdown error", "error", err)
+		os.Exit(1)
 	}
 }

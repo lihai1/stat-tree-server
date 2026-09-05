@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -259,10 +258,4 @@ func (m *LotteryManager) CacheSize() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.cache)
-}
-
-func init() {
-	// Silence unused-warning if log is not otherwise referenced in a build
-	// that strips the per-key load path; keeping the import stable.
-	_ = log.Printf
 }

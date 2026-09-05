@@ -1,7 +1,7 @@
 package config
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -17,8 +17,6 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port        string
-	Host        string
 	GRPCPort    string
 	GatewayPort string
 }
@@ -65,14 +63,14 @@ func loadEnvFile() {
 			envPath := filepath.Join(dir, ".env")
 			if _, err := os.Stat(envPath); err == nil {
 				if loadErr := godotenv.Load(envPath); loadErr == nil {
-					log.Printf("Loaded .env from %s", dir)
+					slog.Info("loaded .env file", "dir", dir)
 					break
 				}
 			}
 			parent := filepath.Dir(dir)
 			if parent == dir {
 				// Reached root, file not found
-				log.Printf("No .env file found, using environment variables or defaults")
+				slog.Info("no .env file found, using environment variables or defaults")
 				break
 			}
 			dir = parent
@@ -85,8 +83,6 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		Server: ServerConfig{
-			Port:        GetEnv("SERVER_PORT", "8080"),
-			Host:        GetEnv("SERVER_HOST", "0.0.0.0"),
 			GRPCPort:    GetEnv("GRPC_PORT", "9090"),
 			GatewayPort: GetEnv("GATEWAY_PORT", "8080"),
 		},
@@ -102,18 +98,22 @@ func Load() (*Config, error) {
 		Auth: AuthConfig{
 			Enabled:  GetEnvAsBool("AUTH_ENABLED", true),
 			JWKSURL:  GetEnv("KEYCLOAK_JWKS_URL", "http://auth:8080/realms/statistiloto/protocol/openid-connect/certs"),
-			Issuer:   GetEnv("KEYCLOAK_ISSUER", "http://localhost/auth/realms/statistiloto"),
-			Audience: GetEnv("KEYCLOAK_AUDIENCE", "account"),
+			Issuer:   GetEnv("KEYCLOAK_ISSUER", ""),
+			Audience: GetEnv("KEYCLOAK_AUDIENCE", "statistiloto-ui"),
 		},
 		Scraper: ScraperConfig{
 			Cron:       GetEnv("LOTTERY_SCRAPER_CRON", "0 3 * * *"),
 			SeedOnBoot: GetEnvAsBool("LOTTERY_SEED_ON_BOOT", true),
 		},
 	}
-	log.Printf("Loaded config: Server{GRPC:%s, Gateway:%s}, Database{Host:%s, Schema:%s}, Auth{enabled:%v}, Scraper{cron:%q, seed:%v}",
-		cfg.Server.GRPCPort, cfg.Server.GatewayPort,
-		cfg.Database.Host, cfg.Database.Schema,
-		cfg.Auth.Enabled, cfg.Scraper.Cron, cfg.Scraper.SeedOnBoot)
+	slog.Info("loaded config",
+		"grpc_port", cfg.Server.GRPCPort,
+		"gateway_port", cfg.Server.GatewayPort,
+		"db_host", cfg.Database.Host,
+		"db_schema", cfg.Database.Schema,
+		"auth_enabled", cfg.Auth.Enabled,
+		"scraper_cron", cfg.Scraper.Cron,
+		"scraper_seed", cfg.Scraper.SeedOnBoot)
 
 	return cfg, nil
 }
@@ -121,15 +121,6 @@ func Load() (*Config, error) {
 func GetEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
-	}
-	return defaultValue
-}
-
-func getEnvAsInt(key string, defaultValue int) int {
-	if value := os.Getenv(key); value != "" {
-		if intVal, err := strconv.Atoi(value); err == nil {
-			return intVal
-		}
 	}
 	return defaultValue
 }

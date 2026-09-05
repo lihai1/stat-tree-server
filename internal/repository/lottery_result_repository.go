@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -352,8 +352,9 @@ func (r *LotteryResultRepository) InsertNewDraws(ctx context.Context, results []
 		return 0, time.Time{}, time.Time{}, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	log.Printf("Repository.InsertNewDraws: inserted %d/%d new draws (date range %s..%s)",
-		inserted, len(results), minDate.Format("2006-01-02"), maxDate.Format("2006-01-02"))
+	slog.Info("Repository.InsertNewDraws: inserted new draws",
+		"inserted", inserted, "total", len(results),
+		"min_date", minDate.Format("2006-01-02"), "max_date", maxDate.Format("2006-01-02"))
 	return inserted, minDate, maxDate, nil
 }
 
@@ -385,7 +386,7 @@ func (r *LotteryResultRepository) existingDrawNumbers(ctx context.Context, candi
 // returns the draw's draw_date, so the caller can invalidate only cache
 // windows overlapping that date.
 func (r *LotteryResultRepository) UpdatePrizeAmounts(ctx context.Context, drawNumber int, prizeAmounts []float64) (time.Time, error) {
-	log.Printf("Repository.UpdatePrizeAmounts: updating draw %d with %d prize amounts", drawNumber, len(prizeAmounts))
+	slog.Info("Repository.UpdatePrizeAmounts: updating draw", "draw", drawNumber, "prize_count", len(prizeAmounts))
 	query := `
 		UPDATE lottery_results
 		SET prize_amounts = $2, updated_at = CURRENT_TIMESTAMP
@@ -395,7 +396,7 @@ func (r *LotteryResultRepository) UpdatePrizeAmounts(ctx context.Context, drawNu
 	var drawDate time.Time
 	err := r.pool.QueryRow(ctx, query, drawNumber, prizeAmounts).Scan(&drawDate)
 	if err != nil {
-		log.Printf("Repository.UpdatePrizeAmounts: failed to update draw %d: %v", drawNumber, err)
+		slog.Warn("Repository.UpdatePrizeAmounts: failed to update draw", "draw", drawNumber, "error", err)
 		return time.Time{}, fmt.Errorf("failed to update prize amounts for draw %d: %w", drawNumber, err)
 	}
 	return drawDate, nil
@@ -408,10 +409,10 @@ func (r *LotteryResultRepository) GetDrawsWithoutPrizes(ctx context.Context, lim
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", limit)
 	}
-	log.Printf("Repository.GetDrawsWithoutPrizes: querying for draws with NULL prize_amounts (limit=%d)", limit)
+	slog.Info("Repository.GetDrawsWithoutPrizes: querying for draws with NULL prize_amounts", "limit", limit)
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
-		log.Printf("Repository.GetDrawsWithoutPrizes: query failed: %v", err)
+		slog.Warn("Repository.GetDrawsWithoutPrizes: query failed", "error", err)
 		return nil, fmt.Errorf("failed to get draws without prizes: %w", err)
 	}
 	defer rows.Close()
@@ -420,12 +421,12 @@ func (r *LotteryResultRepository) GetDrawsWithoutPrizes(ctx context.Context, lim
 	for rows.Next() {
 		var dn int
 		if err := rows.Scan(&dn); err != nil {
-			log.Printf("Repository.GetDrawsWithoutPrizes: row scan failed: %v", err)
+			slog.Warn("Repository.GetDrawsWithoutPrizes: row scan failed", "error", err)
 			return nil, fmt.Errorf("failed to scan draw number: %w", err)
 		}
 		drawNumbers = append(drawNumbers, dn)
 	}
-	log.Printf("Repository.GetDrawsWithoutPrizes: found %d draws without prizes", len(drawNumbers))
+	slog.Info("Repository.GetDrawsWithoutPrizes: found draws without prizes", "count", len(drawNumbers))
 	return drawNumbers, nil
 }
 
@@ -437,10 +438,10 @@ func (r *LotteryResultRepository) GetDrawsWithoutPrizeRefs(ctx context.Context, 
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", limit)
 	}
-	log.Printf("Repository.GetDrawsWithoutPrizeRefs: querying for draws with NULL prize_amounts (limit=%d)", limit)
+	slog.Info("Repository.GetDrawsWithoutPrizeRefs: querying for draws with NULL prize_amounts", "limit", limit)
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
-		log.Printf("Repository.GetDrawsWithoutPrizeRefs: query failed: %v", err)
+		slog.Warn("Repository.GetDrawsWithoutPrizeRefs: query failed", "error", err)
 		return nil, fmt.Errorf("failed to get draws without prizes: %w", err)
 	}
 	defer rows.Close()
@@ -449,11 +450,11 @@ func (r *LotteryResultRepository) GetDrawsWithoutPrizeRefs(ctx context.Context, 
 	for rows.Next() {
 		var ref models.DrawRef
 		if err := rows.Scan(&ref.DrawNumber, &ref.DrawDate); err != nil {
-			log.Printf("Repository.GetDrawsWithoutPrizeRefs: row scan failed: %v", err)
+			slog.Warn("Repository.GetDrawsWithoutPrizeRefs: row scan failed", "error", err)
 			return nil, fmt.Errorf("failed to scan draw ref: %w", err)
 		}
 		refs = append(refs, ref)
 	}
-	log.Printf("Repository.GetDrawsWithoutPrizeRefs: found %d draws without prizes", len(refs))
+	slog.Info("Repository.GetDrawsWithoutPrizeRefs: found draws without prizes", "count", len(refs))
 	return refs, nil
 }

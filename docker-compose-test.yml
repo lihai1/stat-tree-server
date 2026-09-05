@@ -37,6 +37,7 @@ services:
       DB_PASSWORD: postgres
       DB_NAME: statistiloto
       DB_SSLMODE: disable
+      AUTH_ENABLED: "false"
     depends_on:
       liquibase:
         condition: service_completed_successfully

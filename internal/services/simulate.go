@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"sort"
 	"time"
 
@@ -66,7 +66,7 @@ const defaultTicketCost = 3.0
 func (s *LotteryService) Simulate(ctx context.Context, req *lotteryv1.SimulateRequest) (*lotteryv1.SimulateResponse, error) {
 	arch, err := s.archive(ctx, req.GetArchiveWindow())
 	if err != nil {
-		log.Printf("Simulate: failed to load archive: %v", err)
+		slog.Warn("Simulate: failed to load archive", "error", err)
 		return nil, err
 	}
 
@@ -78,8 +78,9 @@ func (s *LotteryService) Simulate(ctx context.Context, req *lotteryv1.SimulateRe
 		results = filterDrawsByWindow(results, simFrom, simTo)
 	}
 
-	log.Printf("Simulate: START form=%v strong=%d archiveDraws=%d simulateDraws=%d",
-		req.GetForm(), req.GetStrong(), len(arch.Draws), len(results))
+	slog.Info("Simulate: START",
+		"form", req.GetForm(), "strong", req.GetStrong(),
+		"archive_draws", len(arch.Draws), "simulate_draws", len(results))
 
 	// Parse user form numbers.
 	form := make([]int, 0, len(req.GetForm()))
@@ -89,7 +90,7 @@ func (s *LotteryService) Simulate(ctx context.Context, req *lotteryv1.SimulateRe
 		}
 	}
 	if len(form) < 6 {
-		log.Printf("Simulate: rejecting form with only %d numbers (need >= 6)", len(form))
+		slog.Warn("Simulate: rejecting form with too few numbers", "count", len(form), "min", 6)
 		return nil, errInvalidForm
 	}
 
@@ -99,7 +100,7 @@ func (s *LotteryService) Simulate(ctx context.Context, req *lotteryv1.SimulateRe
 	// Determine form size (N). Supported: 6, 8, 10, 12.
 	n := len(form)
 	if n > 12 {
-		log.Printf("Simulate: form has %d numbers, truncating to 12", len(form))
+		slog.Info("Simulate: truncating form to 12 numbers", "count", len(form))
 		n = 12
 		form = form[:12]
 	}
@@ -109,7 +110,7 @@ func (s *LotteryService) Simulate(ctx context.Context, req *lotteryv1.SimulateRe
 	// yields C(N,6). No artificial minimum is applied.
 	combinations := generateCombinations(form, 6)
 	numCombinations := len(combinations)
-	log.Printf("Simulate: form size=%d, combinations per draw=%d", n, numCombinations)
+	slog.Info("Simulate: form size", "form_size", n, "combinations_per_draw", numCombinations)
 
 	// Ticket cost per draw.
 	ticketCost := req.GetTicketCost()
@@ -136,7 +137,7 @@ func (s *LotteryService) Simulate(ctx context.Context, req *lotteryv1.SimulateRe
 	userStrong := int(req.GetStrong())
 
 	// Simulate each draw.
-	log.Printf("Simulate: beginning per-draw simulation for %d draws", len(results))
+	slog.Info("Simulate: beginning per-draw simulation", "draws", len(results))
 	drawResults := make([]*lotteryv1.SimulateDrawResult, 0, len(results))
 	// Aggregate per-tier stats.
 	tierTotalHits := [8]int{}
@@ -212,9 +213,13 @@ func (s *LotteryService) Simulate(ctx context.Context, req *lotteryv1.SimulateRe
 		DrawsWithRealPrizes: int32(usingRealPrizes),
 	}
 
-	log.Printf("Simulate: SUCCESS totalDraws=%d totalSpent=%.2f totalWon=%.2f net=%.2f drawsUsingRealPrizes=%d/%d",
-		summary.GetTotalDraws(), summary.GetTotalSpent(), summary.GetTotalWon(),
-		summary.GetNet(), summary.GetDrawsWithRealPrizes(), summary.GetTotalDraws())
+	slog.Info("Simulate: SUCCESS",
+		"total_draws", summary.GetTotalDraws(),
+		"total_spent", summary.GetTotalSpent(),
+		"total_won", summary.GetTotalWon(),
+		"net", summary.GetNet(),
+		"draws_with_real_prizes", summary.GetDrawsWithRealPrizes(),
+		"total_draws_all", summary.GetTotalDraws())
 
 	return &lotteryv1.SimulateResponse{
 		Draws:   drawResults,

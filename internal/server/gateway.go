@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/lihai1/stat-tree-server/internal/middleware"
@@ -87,13 +87,13 @@ func NewGatewayServer(port string, grpcPort string, lotteryService *services.Lot
 
 // Start starts the REST gateway server.
 func (g *GatewayServer) Start() error {
-	log.Printf("Starting REST gateway server on port %s", g.port)
+	slog.Info("starting REST gateway server", "port", g.port)
 	return g.server.ListenAndServe()
 }
 
 // Stop gracefully stops the REST gateway server.
 func (g *GatewayServer) Stop(ctx context.Context) error {
-	log.Println("Stopping REST gateway server...")
+	slog.Info("stopping REST gateway server...")
 	if g.grpcConn != nil {
 		g.grpcConn.Close()
 	}

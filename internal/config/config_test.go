@@ -17,19 +17,19 @@ var _ = Describe("Config", func() {
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(cfg).ToNot(BeNil())
-				Expect(cfg.Server.Port).ToNot(BeEmpty())
+				Expect(cfg.Server.GatewayPort).ToNot(BeEmpty())
 			})
 		})
 
 		Context("with custom environment variables", func() {
 			BeforeEach(func() {
-				os.Setenv("SERVER_PORT", "9000")
+				os.Setenv("GATEWAY_PORT", "9000")
 				os.Setenv("DB_HOST", "custom-host")
 				os.Setenv("DB_USER", "custom-user")
 			})
 
 			AfterEach(func() {
-				os.Unsetenv("SERVER_PORT")
+				os.Unsetenv("GATEWAY_PORT")
 				os.Unsetenv("DB_HOST")
 				os.Unsetenv("DB_USER")
 			})
@@ -39,7 +39,7 @@ var _ = Describe("Config", func() {
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(cfg).ToNot(BeNil())
-				Expect(cfg.Server.Port).ToNot(BeEmpty())
+				Expect(cfg.Server.GatewayPort).ToNot(BeEmpty())
 			})
 		})
 	})
@@ -56,7 +56,7 @@ var _ = Describe("Config", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
-			Expect(cfg.Server.Port).To(Equal("8080"))
+			Expect(cfg.Server.GatewayPort).To(Equal("8080"))
 		})
 	})
 

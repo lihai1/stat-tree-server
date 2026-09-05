@@ -40,15 +40,23 @@ The orchestrator repo's `make proto-go` runs this inside the container.
 ## gRPC service
 
 `lottery.v1.LotteryService` (proto/lottery.proto:18):
+
 - `HealthCheck`, `GenerateForm`, `GetStatistics`, `Analyze`, `Simulate`.
 
+Both the gRPC server and the REST gateway validate JWTs using the same
+`AuthMiddleware` instance (shared JWKS cache). The gRPC interceptor reads the
+`authorization` metadata entry; the HTTP middleware reads the `Authorization`
+header. When `AUTH_ENABLED=true`, all non-health requests require a valid
+Keycloak JWT (defense-in-depth; Traefik also validates at edge).
+
 REST gateway (via grpc-gateway, gateway.go):
+
 - `GET /health` (open)
 - `POST /api/generate/form`, `POST /api/generate/pares`, `POST /api/generate/analyze`, `POST /api/generate/simulate`
 - `GET /swagger` (openapi JSON)
 
-All non-health routes require JWT when `AUTH_ENABLED=true` (defense-in-depth; Traefik
-already validates at edge). `/health` is always open.
+`/health` is always open. All other routes (both gRPC and HTTP) require JWT
+when `AUTH_ENABLED=true`.
 
 ## Database
 
@@ -83,7 +91,8 @@ See `.env.example`.
 ## Conventions
 
 - Errors wrapped with `fmt.Errorf("...: %w", err)`.
-- Logging: stdlib `log` (no structured logging).
+- Logging: `log/slog` with JSON handler (initialized in `cmd/server/main.go`).
+  Structured key-value args; `slog.Info`/`slog.Warn`/`slog.Error`. No `log.Printf`.
 - Repository pattern: services = business logic, repositories = data access.
 - Archive cached per date window via `LotteryManager` (LRU, max 8 entries, lazy
   construction, single-flight on concurrent misses). The archive (`LotteryArchive`)

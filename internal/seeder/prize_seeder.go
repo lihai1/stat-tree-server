@@ -2,7 +2,7 @@ package seeder
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/lihai1/stat-tree-server/internal/repository"
@@ -43,33 +43,35 @@ func (ps *PrizeSeeder) SeedMissingPrizes(ctx context.Context, batchSize int) (in
 		batchSize = 50
 	}
 
-	log.Printf("PrizeSeeder: querying for draws missing prize amounts (batchSize=%d)", batchSize)
+	slog.Info("PrizeSeeder: querying for draws missing prize amounts", "batch_size", batchSize)
 	refs, err := ps.repo.GetDrawsWithoutPrizeRefs(ctx, batchSize)
 	if err != nil {
-		log.Printf("PrizeSeeder: failed to query draws without prizes: %v", err)
+		slog.Warn("PrizeSeeder: failed to query draws without prizes", "error", err)
 		return 0, time.Time{}, time.Time{}, err
 	}
 	if len(refs) == 0 {
-		log.Println("PrizeSeeder: no draws missing prize amounts")
+		slog.Info("PrizeSeeder: no draws missing prize amounts")
 		return 0, time.Time{}, time.Time{}, nil
 	}
 
-	log.Printf("PrizeSeeder: scraping prize tables for %d draws (draw %d..%d)",
-		len(refs), refs[0].DrawNumber, refs[len(refs)-1].DrawNumber)
+	slog.Info("PrizeSeeder: scraping prize tables",
+		"draws", len(refs),
+		"first_draw", refs[0].DrawNumber,
+		"last_draw", refs[len(refs)-1].DrawNumber)
 
 	written := 0
 	var minDate, maxDate time.Time
 	for _, ref := range refs {
 		dn := ref.DrawNumber
-		log.Printf("PrizeSeeder: processing draw %d (%d/%d)", dn, written+1, len(refs))
+		slog.Info("PrizeSeeder: processing draw", "draw", dn, "progress", written+1, "total", len(refs))
 		amounts, err := ps.scraper.FetchPrizeAmounts(dn)
 		if err != nil {
-			log.Printf("PrizeSeeder: draw %d fetch failed: %v", dn, err)
+			slog.Warn("PrizeSeeder: draw fetch failed", "draw", dn, "error", err)
 			continue
 		}
 		drawDate, err := ps.repo.UpdatePrizeAmounts(ctx, dn, amounts)
 		if err != nil {
-			log.Printf("PrizeSeeder: failed to persist draw %d: %v", dn, err)
+			slog.Warn("PrizeSeeder: failed to persist draw", "draw", dn, "error", err)
 			continue
 		}
 		written++
@@ -83,7 +85,9 @@ func (ps *PrizeSeeder) SeedMissingPrizes(ctx context.Context, batchSize int) (in
 		}
 	}
 
-	log.Printf("PrizeSeeder: completed — wrote prize amounts for %d/%d draws (date range %s..%s)",
-		written, len(refs), minDate.Format("2006-01-02"), maxDate.Format("2006-01-02"))
+	slog.Info("PrizeSeeder: completed",
+		"written", written, "total", len(refs),
+		"min_date", minDate.Format("2006-01-02"),
+		"max_date", maxDate.Format("2006-01-02"))
 	return written, minDate, maxDate, nil
 }

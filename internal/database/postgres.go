@@ -3,7 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -38,7 +38,7 @@ func NewDatabase(cfg *config.DatabaseConfig) (*Database, error) {
 		return nil, fmt.Errorf("unable to ping database: %w", err)
 	}
 
-	log.Printf("Successfully connected to database (schema: %s)", cfg.Schema)
+	slog.Info("connected to database", "schema", cfg.Schema)
 	return &Database{Pool: pool}, nil
 }
 

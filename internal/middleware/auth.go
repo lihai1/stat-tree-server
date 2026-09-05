@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"strings"
@@ -14,6 +15,10 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"github.com/lihai1/stat-tree-server/internal/config"
 )
@@ -166,10 +171,9 @@ func parseRSAPublicKey(nB64, eB64 string) (*rsa.PublicKey, error) {
 }
 
 func base64URLDecode(s string) ([]byte, error) {
-	// Add padding if needed.
-	if pad := len(s) % 4; pad != 0 {
-		s += strings.Repeat("=", 4-pad)
-	}
+	// JWK uses base64url without padding. RawURLEncoding handles unpadded input.
+	// If the input happens to have padding, strip it first (RawURLEncoding rejects '=').
+	s = strings.TrimRight(s, "=")
 	return base64.RawURLEncoding.DecodeString(s)
 }
 
@@ -200,42 +204,116 @@ func (am *AuthMiddleware) JWT(next http.Handler) http.Handler {
 		}
 
 		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "Authorization header required", http.StatusUnauthorized)
+		if err := am.validateAuthHeader(authHeader); err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
-		}
-
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenString == authHeader {
-			http.Error(w, "Invalid authorization header format", http.StatusUnauthorized)
-			return
-		}
-
-		claims := jwt.MapClaims{}
-		cache := am.keyFunc()
-
-		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-			}
-			kid, _ := token.Header["kid"].(string)
-			return cache.get(kid)
-		}, jwt.WithValidMethods([]string{"RS256"}))
-
-		if err != nil || !token.Valid {
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
-			return
-		}
-
-		// Verify issuer if configured.
-		if am.cfg.Issuer != "" {
-			iss, _ := claims["iss"].(string)
-			if iss != am.cfg.Issuer {
-				http.Error(w, "Invalid token issuer", http.StatusUnauthorized)
-				return
-			}
 		}
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// validateAuthHeader parses and validates a "Bearer <token>" string using
+// the shared JWKS cache, issuer, and audience checks. Returns nil on success.
+// This is the core validation logic shared by both the HTTP middleware and
+// the gRPC interceptor.
+func (am *AuthMiddleware) validateAuthHeader(authHeader string) error {
+	if authHeader == "" {
+		return fmt.Errorf("Authorization header required")
+	}
+
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString == authHeader {
+		return fmt.Errorf("Invalid authorization header format")
+	}
+
+	return am.validateTokenString(tokenString)
+}
+
+// validateTokenString parses and validates a raw JWT string.
+func (am *AuthMiddleware) validateTokenString(tokenString string) error {
+	claims := jwt.MapClaims{}
+	cache := am.keyFunc()
+
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		kid, _ := token.Header["kid"].(string)
+		return cache.get(kid)
+	}, jwt.WithValidMethods([]string{"RS256"}))
+
+	if err != nil || !token.Valid {
+		slog.Warn("token validation failed", "error", err, "valid", token != nil && token.Valid)
+		return fmt.Errorf("Invalid token")
+	}
+
+	// Verify issuer if configured.
+	if am.cfg.Issuer != "" {
+		iss, _ := claims["iss"].(string)
+		if iss != am.cfg.Issuer {
+			return fmt.Errorf("Invalid token issuer")
+		}
+	}
+
+	// Verify audience if configured.
+	if am.cfg.Audience != "" {
+		if !audienceContains(claims["aud"], am.cfg.Audience) {
+			return fmt.Errorf("Invalid token audience")
+		}
+	}
+
+	return nil
+}
+
+// GRPCUnaryInterceptor returns a gRPC unary server interceptor that validates
+// the JWT from the "authorization" gRPC metadata entry. It reuses the same
+// AuthMiddleware instance (and its JWKS cache) as the HTTP middleware, so
+// both transport paths share a single validation engine.
+func (am *AuthMiddleware) GRPCUnaryInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if !am.cfg.Enabled {
+			return handler(ctx, req)
+		}
+
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			return nil, status.Error(codes.Unauthenticated, "Authorization metadata required")
+		}
+
+		values := md.Get("authorization")
+		if len(values) == 0 {
+			return nil, status.Error(codes.Unauthenticated, "Authorization header required")
+		}
+
+		if err := am.validateAuthHeader(values[0]); err != nil {
+			slog.Warn("gRPC auth: token validation failed", "error", err)
+			return nil, status.Error(codes.Unauthenticated, err.Error())
+		}
+
+		return handler(ctx, req)
+	}
+}
+
+// audienceContains checks whether the expected audience is present in the
+// "aud" claim. The claim can be either a single string or a slice of strings
+// (per RFC 7519 §4.1.3).
+func audienceContains(aud any, expected string) bool {
+	switch v := aud.(type) {
+	case string:
+		return v == expected
+	case []string:
+		for _, a := range v {
+			if a == expected {
+				return true
+			}
+		}
+	case []any:
+		for _, a := range v {
+			if fmt.Sprintf("%v", a) == expected {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -3,7 +3,7 @@ package startup
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/lihai1/stat-tree-server/internal/config"
@@ -38,7 +38,7 @@ func NewServer(cfg *config.Config) (*Server, error) {
 
 	// Initialize the only repository this service owns.
 	lotteryResultRepo := repository.NewLotteryResultRepository(db.Pool)
-	log.Println("Repositories initialized (lottery_results only)")
+	slog.Info("repositories initialized (lottery_results only)")
 
 	// The LotteryManager owns the LRU archive cache shared by every RPC.
 	// It is created before the seeder runs so the seed-on-boot path can
@@ -47,10 +47,10 @@ func NewServer(cfg *config.Config) (*Server, error) {
 
 	// Seed lottery data on first boot if enabled and the table is empty.
 	if cfg.Scraper.SeedOnBoot {
-		log.Println("Startup: seed-on-boot enabled, seeding lottery data")
+		slog.Info("startup: seed-on-boot enabled, seeding lottery data")
 		lotterySeeder := seeder.NewLotterySeeder(lotteryResultRepo)
 		if err := lotterySeeder.SeedLotteryData(context.Background()); err != nil {
-			log.Printf("Warning: Failed to seed lottery data: %v", err)
+			slog.Warn("failed to seed lottery data", "error", err)
 			// Continue startup even if seeding fails — the scraper cron
 			// will retry.
 		}
@@ -60,10 +60,10 @@ func NewServer(cfg *config.Config) (*Server, error) {
 
 		// Best-effort prize-amount backfill on boot. Failures are logged
 		// but never block startup; the cron will retry on each tick.
-		log.Println("Startup: running initial prize-amount backfill (batchSize=50)")
+		slog.Info("startup: running initial prize-amount backfill (batchSize=50)")
 		prizeSeeder := seeder.NewPrizeSeeder(lotteryResultRepo)
 		if _, _, _, err := prizeSeeder.SeedMissingPrizes(context.Background(), 50); err != nil {
-			log.Printf("Warning: Initial prize backfill failed: %v", err)
+			slog.Warn("initial prize backfill failed", "error", err)
 		}
 	}
 
@@ -71,11 +71,13 @@ func NewServer(cfg *config.Config) (*Server, error) {
 	// archive cache manager.
 	lotteryService := services.NewLotteryService(manager)
 
-	// Create gRPC server.
-	grpcServer := server.NewGRPCServer(cfg.Server.GRPCPort, lotteryService)
-
 	// Create the Keycloak JWT auth middleware (defense-in-depth).
+	// Shared between the HTTP REST gateway and the gRPC server so both
+	// transport paths use the same JWKS cache and validation logic.
 	authMW := middleware.NewAuthMiddleware(cfg.Auth)
+
+	// Create gRPC server with auth interceptor.
+	grpcServer := server.NewGRPCServer(cfg.Server.GRPCPort, lotteryService, authMW)
 
 	// Create REST gateway server with auth middleware.
 	gatewayServer, err := server.NewGatewayServer(cfg.Server.GatewayPort, cfg.Server.GRPCPort, lotteryService, authMW)
@@ -96,7 +98,7 @@ func NewServer(cfg *config.Config) (*Server, error) {
 	if cfg.Scraper.Cron != "" {
 		s.startScraperScheduler(cfg.Scraper.Cron, lotteryResultRepo, manager)
 	} else {
-		log.Println("Scraper cron schedule is empty; skipping scheduled refresh")
+		slog.Info("scraper cron schedule is empty; skipping scheduled refresh")
 	}
 
 	return s, nil
@@ -119,10 +121,10 @@ func NewServer(cfg *config.Config) (*Server, error) {
 func (s *Server) startScraperScheduler(cronSpec string, repo *repository.LotteryResultRepository, manager *services.LotteryManager) {
 	interval := parseCronAsInterval(cronSpec)
 	if interval <= 0 {
-		log.Printf("Scraper schedule %q could not be parsed; skipping", cronSpec)
+		slog.Warn("scraper schedule could not be parsed; skipping", "cron", cronSpec)
 		return
 	}
-	log.Printf("Starting scheduled scraper every %s", interval)
+	slog.Info("starting scheduled scraper", "interval", interval.String())
 
 	go func() {
 		ticker := time.NewTicker(interval)
@@ -135,17 +137,17 @@ func (s *Server) startScraperScheduler(cronSpec string, repo *repository.Lottery
 			defer cancel()
 			results, err := scraperClient.FetchLotteryData()
 			if err != nil {
-				log.Printf("Scraper fetch failed: %v", err)
+				slog.Warn("scraper fetch failed", "error", err)
 				return
 			}
 
 			// Insert only genuinely new draws; existing rows are untouched.
 			inserted, fromD, toD, err := repo.InsertNewDraws(ctx, results)
 			if err != nil {
-				log.Printf("Scraper persist failed: %v", err)
+				slog.Warn("scraper persist failed", "error", err)
 				return
 			}
-			log.Printf("Scraper inserted %d new lottery results (of %d fetched)", inserted, len(results))
+			slog.Info("scraper inserted new lottery results", "inserted", inserted, "fetched", len(results))
 
 			// Invalidate only cache windows overlapping the new draws.
 			if inserted > 0 {
@@ -157,9 +159,9 @@ func (s *Server) startScraperScheduler(cronSpec string, repo *repository.Lottery
 			defer prizeCancel()
 			written, pFrom, pTo, err := prizeSeeder.SeedMissingPrizes(prizeCtx, 50)
 			if err != nil {
-				log.Printf("Prize backfill failed: %v", err)
+				slog.Warn("prize backfill failed", "error", err)
 			} else if written > 0 {
-				log.Printf("Prize backfill wrote %d draws", written)
+				slog.Info("prize backfill wrote draws", "written", written)
 				// Prize amounts feed the simulation, so invalidate windows
 				// overlapping the updated draws.
 				manager.InvalidateRange(pFrom, pTo)
@@ -212,7 +214,7 @@ func (s *Server) Start() error {
 
 	go func() {
 		if err := <-errChan; err != nil {
-			fmt.Printf("Server error: %v\n", err)
+			slog.Error("server error", "error", err)
 		}
 	}()
 
@@ -221,7 +223,7 @@ func (s *Server) Start() error {
 
 // Stop gracefully stops both servers and the scraper.
 func (s *Server) Stop() error {
-	log.Println("Shutting down servers...")
+	slog.Info("shutting down servers...")
 
 	// Stop the scraper goroutine.
 	if s.scraperStop != nil {
@@ -234,7 +236,7 @@ func (s *Server) Stop() error {
 	s.grpcServer.Stop()
 	if err := s.gatewayServer.Stop(ctx); err != nil {
 		if err.Error() != "http: Server closed" {
-			log.Printf("Gateway shutdown error: %v", err)
+			slog.Warn("gateway shutdown error", "error", err)
 		}
 	}
 
@@ -242,6 +244,6 @@ func (s *Server) Stop() error {
 		s.db.Close()
 	}
 
-	log.Println("Servers stopped")
+	slog.Info("servers stopped")
 	return nil
 }

@@ -4,7 +4,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -47,20 +47,20 @@ func NewPaisScraper() *PaisScraper {
 
 // FetchLotteryData fetches lottery data from pais.co.il
 func (ps *PaisScraper) FetchLotteryData() ([]models.LotteryResult, error) {
-	log.Printf("PaisScraper: fetching lottery CSV from %s", paisDownloadURL)
+	slog.Info("PaisScraper: fetching lottery CSV", "url", paisDownloadURL)
 	resp, err := ps.client.Get(paisDownloadURL)
 	if err != nil {
-		log.Printf("PaisScraper: CSV fetch failed: %v", err)
+		slog.Warn("PaisScraper: CSV fetch failed", "error", err)
 		return nil, fmt.Errorf("failed to fetch data: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("PaisScraper: CSV fetch returned unexpected status %d", resp.StatusCode)
+		slog.Warn("PaisScraper: CSV fetch returned unexpected status", "status", resp.StatusCode)
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	log.Printf("PaisScraper: parsing CSV response")
+	slog.Info("PaisScraper: parsing CSV response")
 	return ps.parseCSV(resp.Body)
 }
 
@@ -80,11 +80,11 @@ func (ps *PaisScraper) FetchLotteryData() ([]models.LotteryResult, error) {
 // fall back to default estimates.
 func (ps *PaisScraper) FetchPrizeAmounts(drawNumber int) ([]float64, error) {
 	url := fmt.Sprintf(paisDrawURL, drawNumber)
-	log.Printf("PaisScraper: fetching prize table for draw %d from %s", drawNumber, url)
+	slog.Info("PaisScraper: fetching prize table", "draw", drawNumber, "url", url)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Printf("PaisScraper: failed to build request for draw %d: %v", drawNumber, err)
+		slog.Warn("PaisScraper: failed to build request", "draw", drawNumber, "error", err)
 		return nil, fmt.Errorf("prize scraper: failed to build request: %w", err)
 	}
 	for k, v := range browserHeaders {
@@ -93,24 +93,24 @@ func (ps *PaisScraper) FetchPrizeAmounts(drawNumber int) ([]float64, error) {
 
 	resp, err := ps.client.Do(req)
 	if err != nil {
-		log.Printf("PaisScraper: HTTP request failed for draw %d: %v", drawNumber, err)
+		slog.Warn("PaisScraper: HTTP request failed", "draw", drawNumber, "error", err)
 		return nil, fmt.Errorf("prize scraper: request failed for draw %d: %w", drawNumber, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("PaisScraper: draw %d returned unexpected status %d", drawNumber, resp.StatusCode)
+		slog.Warn("PaisScraper: unexpected status", "draw", drawNumber, "status", resp.StatusCode)
 		return nil, fmt.Errorf("prize scraper: unexpected status %d for draw %d", resp.StatusCode, drawNumber)
 	}
 
-	log.Printf("PaisScraper: parsing prize HTML for draw %d", drawNumber)
+	slog.Info("PaisScraper: parsing prize HTML", "draw", drawNumber)
 	amounts, err := parsePrizeHTML(resp.Body, drawNumber)
 	if err != nil {
-		log.Printf("PaisScraper: HTML parse failed for draw %d: %v", drawNumber, err)
+		slog.Warn("PaisScraper: HTML parse failed", "draw", drawNumber, "error", err)
 		return nil, err
 	}
 
-	log.Printf("PaisScraper: draw %d prize amounts parsed: %v", drawNumber, amounts)
+	slog.Info("PaisScraper: prize amounts parsed", "draw", drawNumber, "amounts", amounts)
 	return amounts, nil
 }
 
@@ -139,7 +139,7 @@ func (ps *PaisScraper) parseCSV(reader io.Reader) ([]models.LotteryResult, error
 
 		result, err := ps.parseRecord(record)
 		if err != nil {
-			log.Printf("Warning: failed to parse line %d: %v", lineNum, err)
+			slog.Warn("failed to parse CSV line", "line", lineNum, "error", err)
 			lineNum++
 			continue
 		}
@@ -221,7 +221,7 @@ var secondPrizeRE = regexp.MustCompile(`הפרס השני בהגרלה זו עמ
 func parsePrizeHTML(r io.Reader, drawNumber int) ([]float64, error) {
 	doc, err := html.Parse(r)
 	if err != nil {
-		log.Printf("parsePrizeHTML: HTML parse error for draw %d: %v", drawNumber, err)
+		slog.Warn("parsePrizeHTML: HTML parse error", "draw", drawNumber, "error", err)
 		return nil, fmt.Errorf("prize scraper: failed to parse HTML for draw %d: %w", drawNumber, err)
 	}
 
@@ -242,15 +242,14 @@ func parsePrizeHTML(r io.Reader, drawNumber int) ([]float64, error) {
 	}
 	walk(doc)
 
-	log.Printf("parsePrizeHTML: draw %d — collected %d aria-labels", drawNumber, len(ariaLabels))
+	slog.Info("parsePrizeHTML: collected aria-labels", "draw", drawNumber, "count", len(ariaLabels))
 
 	// Also collect text content for the advertised first/second prize.
 	pageText := textContent(doc)
 	firstPrize := parseAmount(firstPrizeRE, pageText)
 	secondPrize := parseAmount(secondPrizeRE, pageText)
 
-	log.Printf("parsePrizeHTML: draw %d — advertised firstPrize=%.0f, secondPrize=%.0f",
-		drawNumber, firstPrize, secondPrize)
+	slog.Info("parsePrizeHTML: advertised prizes", "draw", drawNumber, "first_prize", firstPrize, "second_prize", secondPrize)
 
 	// Walk the aria-labels in order and group them into tier triplets:
 	// (tier label, winners, prize amount). The regular lotto table
@@ -298,7 +297,7 @@ func parsePrizeHTML(r io.Reader, drawNumber int) ([]float64, error) {
 	}
 
 	if tiersFound < 8 {
-		log.Printf("parsePrizeHTML: draw %d — only found %d/8 tiers, aborting", drawNumber, tiersFound)
+		slog.Warn("parsePrizeHTML: incomplete tiers", "draw", drawNumber, "found", tiersFound, "expected", 8)
 		return nil, fmt.Errorf("prize scraper: only found %d/8 tiers for draw %d", tiersFound, drawNumber)
 	}
 
@@ -306,18 +305,15 @@ func parsePrizeHTML(r io.Reader, drawNumber int) ([]float64, error) {
 	// is 0 ₪ because nobody won. Use the advertised first/second prize
 	// instead so the simulation reflects the actual prize pool.
 	if tierWinners[0] == 0 && firstPrize > 0 {
-		log.Printf("parsePrizeHTML: draw %d — tier 1 (6+strong) had 0 winners, using advertised firstPrize=%.0f",
-			drawNumber, firstPrize)
+		slog.Info("parsePrizeHTML: tier 1 had 0 winners, using advertised firstPrize", "draw", drawNumber, "first_prize", firstPrize)
 		tierAmounts[0] = firstPrize
 	}
 	if tierWinners[1] == 0 && secondPrize > 0 {
-		log.Printf("parsePrizeHTML: draw %d — tier 2 (6) had 0 winners, using advertised secondPrize=%.0f",
-			drawNumber, secondPrize)
+		slog.Info("parsePrizeHTML: tier 2 had 0 winners, using advertised secondPrize", "draw", drawNumber, "second_prize", secondPrize)
 		tierAmounts[1] = secondPrize
 	}
 
-	log.Printf("parsePrizeHTML: draw %d — successfully parsed 8 tiers: winners=%v, amounts=%v",
-		drawNumber, tierWinners, tierAmounts)
+	slog.Info("parsePrizeHTML: parsed 8 tiers", "draw", drawNumber, "winners", tierWinners, "amounts", tierAmounts)
 	return tierAmounts, nil
 }
 

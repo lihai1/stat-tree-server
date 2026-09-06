@@ -435,10 +435,12 @@ func (x *Pair) GetCount() int32 {
 
 // GetStatisticsResponse is the list of frequent pairs/groups.
 type GetStatisticsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Pairs         []*Pair                `protobuf:"bytes,1,rep,name=pairs,proto3" json:"pairs,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Pairs []*Pair                `protobuf:"bytes,1,rep,name=pairs,proto3" json:"pairs,omitempty"`
+	// Number of historical draws in the requested date window.
+	TotalDrawsInRange int32 `protobuf:"varint,2,opt,name=total_draws_in_range,json=totalDrawsInRange,proto3" json:"total_draws_in_range,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *GetStatisticsResponse) Reset() {
@@ -476,6 +478,13 @@ func (x *GetStatisticsResponse) GetPairs() []*Pair {
 		return x.Pairs
 	}
 	return nil
+}
+
+func (x *GetStatisticsResponse) GetTotalDrawsInRange() int32 {
+	if x != nil {
+		return x.TotalDrawsInRange
+	}
+	return 0
 }
 
 // AnalyzeRequest mirrors the original FormAnalyzeCalculations model.
@@ -1349,9 +1358,10 @@ const file_lottery_proto_rawDesc = "" +
 	"\bstrength\x18\x04 \x01(\x0e2\x14.lottery.v1.StrengthR\bstrength\"6\n" +
 	"\x04Pair\x12\x18\n" +
 	"\anumbers\x18\x01 \x03(\x05R\anumbers\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\x05R\x05count\"?\n" +
+	"\x05count\x18\x02 \x01(\x05R\x05count\"p\n" +
 	"\x15GetStatisticsResponse\x12&\n" +
-	"\x05pairs\x18\x01 \x03(\v2\x10.lottery.v1.PairR\x05pairs\"T\n" +
+	"\x05pairs\x18\x01 \x03(\v2\x10.lottery.v1.PairR\x05pairs\x12/\n" +
+	"\x14total_draws_in_range\x18\x02 \x01(\x05R\x11totalDrawsInRange\"T\n" +
 	"\x0eAnalyzeRequest\x12\x12\n" +
 	"\x04form\x18\x01 \x03(\x05R\x04form\x12.\n" +
 	"\x06window\x18\x02 \x01(\v2\x16.lottery.v1.DateWindowR\x06window\"{\n" +

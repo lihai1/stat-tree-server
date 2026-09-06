@@ -120,6 +120,8 @@ message Pair {
 // GetStatisticsResponse is the list of frequent pairs/groups.
 message GetStatisticsResponse {
   repeated Pair pairs = 1;
+  // Number of historical draws in the requested date window.
+  int32 total_draws_in_range = 2;
 }
 
 // AnalyzeRequest mirrors the original FormAnalyzeCalculations model.

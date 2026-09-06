@@ -171,7 +171,7 @@ go build -o stat-tree-server cmd/server/main.go
 
 - `GET /health` - Health check endpoint
 - `POST /api/generate/form` - Generate lottery number combinations
-- `POST /api/generate/pares` - Get statistics on number pairs/groups (form_type ≤ 6)
+- `POST /api/generate/pares` - Get statistics on number pairs/groups (form_type ≤ 6); response includes `total_draws_in_range` (draw count in the requested window)
 - `POST /api/generate/analyze` - Analyze user-selected numbers (all treated as regulars)
 - `POST /api/generate/simulate` - Backtest a ticket against historical draws
 
@@ -180,7 +180,7 @@ go build -o stat-tree-server cmd/server/main.go
 The server exposes gRPC services defined in `proto/lottery.proto`:
 - `HealthCheck` - Service status and draw count
 - `GenerateForm` - Generate lottery number combinations (strong number appended)
-- `GetStatistics` - Calculate statistics for number pairs/groups (form_type ≤ 6)
+- `GetStatistics` - Calculate statistics for number pairs/groups (form_type ≤ 6); response includes `total_draws_in_range`
 - `Analyze` - Analyze user-selected numbers against historical data (all regulars)
 - `Simulate` - Backtest a ticket against every historical draw in a date window
 
@@ -207,7 +207,7 @@ DB_SSLMODE=disable
 AUTH_ENABLED=true
 KEYCLOAK_JWKS_URL=http://localhost:8080/realms/statistiloto/protocol/openid-connect/certs
 KEYCLOAK_ISSUER=http://localhost/auth/realms/statistiloto
-KEYCLOAK_AUDIENCE=account
+KEYCLOAK_AUDIENCE=statistiloto-ui
 
 # Scraper / Seeder
 LOTTERY_SCRAPER_CRON=0 3 * * *
@@ -235,6 +235,7 @@ The application is designed to be stateless and scalable:
 - REST API for external client access via gRPC-Gateway
 - Connection pooling for database access
 - Keycloak JWT validation (stateless, RS256 via JWKS) as defense-in-depth
+- Issuer validation is disabled in the orchestrator (`KEYCLOAK_ISSUER=""` in `docker-compose.yml`) because Keycloak issues tokens with the external-facing URL which varies by deployment; signature and audience (`statistiloto-ui`) are still validated. The ngrok override sets `KEYCLOAK_ISSUER` to the public tunnel URL to restore issuer validation.
 - Scheduled scraper refreshing lottery_results from pais.co.il (insert-only, range-scoped cache invalidation)
 - Protocol Buffers for efficient serialization
 - Liquibase for database schema management (lottery schema only)

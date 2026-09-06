@@ -174,7 +174,10 @@ func (s *LotteryService) GetStatistics(ctx context.Context, req *lotteryv1.GetSt
 		})
 	}
 
-	return &lotteryv1.GetStatisticsResponse{Pairs: pairs}, nil
+	return &lotteryv1.GetStatisticsResponse{
+		Pairs:             pairs,
+		TotalDrawsInRange: int32(len(arch.Draws)),
+	}, nil
 }
 
 // Analyze analyzes user-selected regular numbers against historical data.

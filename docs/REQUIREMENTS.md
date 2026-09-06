@@ -17,8 +17,9 @@ Derived from the actual codebase (`go.mod`, `internal/`, `db-migration/`,
   The strong number is appended as the last element of each form.
 - **FR-3** `GetStatistics` — calculate frequent number pairs/groups over an
   optional date window, returning the top `how_many` pairs with occurrence
-  counts. `form_type` must be ≤ 6 (the cached tree is built through depth 6;
-  larger group sizes are rejected).
+  counts and `total_draws_in_range` (the number of historical draws in the
+  requested window). `form_type` must be ≤ 6 (the cached tree is built through
+  depth 6; larger group sizes are rejected).
 - **FR-4** `Analyze` — evaluate user-selected numbers against historical
   winning draws, returning grouped frequency results (one entry per group
   size 1–6) and the archive size used. All numbers in the form are treated
@@ -112,8 +113,12 @@ Derived from the actual codebase (`go.mod`, `internal/`, `db-migration/`,
 
 - **AUTH-1** Keycloak JWKS cache with TTL (15 min), kid lookup, and
   double-checked locking refresh.
-- **AUTH-2** Per-request token verification: signature (RS256), issuer,
-  audience, expiry.
+- **AUTH-2** Per-request token verification: signature (RS256), audience
+  (`statistiloto-ui`), expiry. Issuer validation is configurable via
+  `KEYCLOAK_ISSUER` — the orchestrator dev compose sets it to `""` (disabled)
+  because Keycloak issues tokens with the external-facing URL which varies by
+  deployment; the ngrok override sets it to the public tunnel URL to restore
+  issuer validation.
 - **AUTH-3** JWKS fetch has a 10-second timeout with context cancellation.
 - **AUTH-4** `AUTH_ENABLED` config flag toggles validation (default: true).
 

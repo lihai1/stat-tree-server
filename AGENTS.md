@@ -84,6 +84,9 @@ when `AUTH_ENABLED=true`.
 Server: `SERVER_PORT`, `SERVER_HOST`, `GRPC_PORT`, `GATEWAY_PORT`
 DB: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSLMODE`, `DB_SCHEMA`
 Auth: `AUTH_ENABLED`, `KEYCLOAK_JWKS_URL`, `KEYCLOAK_ISSUER`, `KEYCLOAK_AUDIENCE`
+  - Orchestrator dev compose sets `KEYCLOAK_ISSUER=""` (disabled — external URL varies by
+    deployment) and `KEYCLOAK_AUDIENCE=statistiloto-ui`. Signature + audience are still
+    validated. The ngrok override sets `KEYCLOAK_ISSUER` to the public tunnel URL.
 Scraper: `LOTTERY_SCRAPER_CRON`, `LOTTERY_SEED_ON_BOOT`
 
 See `.env.example`.
@@ -98,7 +101,7 @@ See `.env.example`.
   construction, single-flight on concurrent misses). The archive (`LotteryArchive`)
   is immutable after construction and safe for concurrent read-only use.
 - Default archive start date: `2004-02-12` (current Israeli Lotto format, numbers 1–37).
-- `GetStatistics` rejects `form_type > 6` (the tree is built through depth 6).
+- `GetStatistics` rejects `form_type > 6` (the tree is built through depth 6). Response includes `total_draws_in_range` (number of draws in the requested date window).
 - `Analyze` treats all supplied numbers as regular numbers — no trailing strong-number stripping.
 
 ## Gotchas

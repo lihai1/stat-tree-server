@@ -14,6 +14,7 @@ type Config struct {
 	Database DatabaseConfig
 	Auth     AuthConfig
 	Scraper  ScraperConfig
+	Redis    RedisConfig
 }
 
 type ServerConfig struct {
@@ -52,6 +53,10 @@ type ScraperConfig struct {
 	Cron string
 	// SeedOnBoot seeds from the scraper on first boot if the table is empty.
 	SeedOnBoot bool
+}
+
+type RedisConfig struct {
+	URL string
 }
 
 func loadEnvFile() {
@@ -104,6 +109,9 @@ func Load() (*Config, error) {
 		Scraper: ScraperConfig{
 			Cron:       GetEnv("LOTTERY_SCRAPER_CRON", "0 3 * * *"),
 			SeedOnBoot: GetEnvAsBool("LOTTERY_SEED_ON_BOOT", true),
+		},
+		Redis: RedisConfig{
+			URL: GetEnv("REDIS_URL", ""),
 		},
 	}
 	slog.Info("loaded config",

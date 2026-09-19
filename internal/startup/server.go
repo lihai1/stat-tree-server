@@ -14,6 +14,7 @@ import (
 	"github.com/lihai1/stat-tree-server/internal/seeder"
 	"github.com/lihai1/stat-tree-server/internal/server"
 	"github.com/lihai1/stat-tree-server/internal/services"
+	"github.com/redis/go-redis/v9"
 )
 
 // Server holds the server instances and dependencies.
@@ -21,11 +22,13 @@ import (
 // lottery_results table it holds no user data and no saved forms (those moved
 // to the Java BFF + Keycloak).
 type Server struct {
-	grpcServer    *server.GRPCServer
-	gatewayServer *server.GatewayServer
-	db            *database.Database
-	manager       *services.LotteryManager
-	scraperStop   chan struct{}
+	grpcServer      *server.GRPCServer
+	gatewayServer   *server.GatewayServer
+	db              *database.Database
+	manager         *services.LotteryManager
+	scraperRunner   *services.ScraperRunner
+	scraperConsumer *services.ScraperConsumer
+	scraperStop     chan struct{}
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -86,17 +89,36 @@ func NewServer(cfg *config.Config) (*Server, error) {
 		return nil, err
 	}
 
+	scraperClient := scraper.NewPaisScraper()
+	prizeSeeder := seeder.NewPrizeSeeder(lotteryResultRepo)
+	scraperRunner := services.NewScraperRunner(scraperClient, lotteryResultRepo, manager, prizeSeeder)
+
+	var scraperConsumer *services.ScraperConsumer
+	if cfg.Redis.URL != "" {
+		opt, parseErr := redis.ParseURL(cfg.Redis.URL)
+		if parseErr != nil {
+			slog.Warn("failed to parse REDIS_URL; scraper consumer not started", "url", cfg.Redis.URL, "error", parseErr)
+		} else {
+			rdb := redis.NewClient(opt)
+			scraperConsumer = services.NewScraperConsumer(rdb, scraperRunner)
+			scraperConsumer.Start()
+			slog.Info("scraper Redis consumer started", "url", cfg.Redis.URL)
+		}
+	}
+
 	s := &Server{
-		grpcServer:    grpcServer,
-		gatewayServer: gatewayServer,
-		db:            db,
-		manager:       manager,
-		scraperStop:   make(chan struct{}),
+		grpcServer:      grpcServer,
+		gatewayServer:   gatewayServer,
+		db:              db,
+		manager:         manager,
+		scraperRunner:   scraperRunner,
+		scraperConsumer: scraperConsumer,
+		scraperStop:     make(chan struct{}),
 	}
 
 	// Start the scheduled scraper to refresh lottery_results from pais.co.il.
 	if cfg.Scraper.Cron != "" {
-		s.startScraperScheduler(cfg.Scraper.Cron, lotteryResultRepo, manager)
+		s.startScraperScheduler(cfg.Scraper.Cron, scraperRunner)
 	} else {
 		slog.Info("scraper cron schedule is empty; skipping scheduled refresh")
 	}
@@ -107,18 +129,7 @@ func NewServer(cfg *config.Config) (*Server, error) {
 // startScraperScheduler runs a ticker that refreshes lottery_results on the
 // configured cron schedule. A simple daily/hourly ticker is used here; for
 // arbitrary cron expressions a library like robfig/cron would be needed.
-//
-// The scraper fetches the full upstream CSV but only inserts draws whose
-// draw_number is not already stored, so it does not rewrite the whole
-// history on every run. After inserting new draws it invalidates only the
-// cache windows whose date range overlaps the newly written draws.
-//
-// It then triggers a prize-amount backfill pass that scrapes per-draw prize
-// data from the pais.co.il individual draw pages for any draws whose
-// prize_amounts column is still NULL. The prize backfill is best-effort and
-// never aborts the results refresh. After prize writes it invalidates only
-// the cache windows overlapping the updated draws' dates.
-func (s *Server) startScraperScheduler(cronSpec string, repo *repository.LotteryResultRepository, manager *services.LotteryManager) {
+func (s *Server) startScraperScheduler(cronSpec string, runner *services.ScraperRunner) {
 	interval := parseCronAsInterval(cronSpec)
 	if interval <= 0 {
 		slog.Warn("scraper schedule could not be parsed; skipping", "cron", cronSpec)
@@ -130,41 +141,11 @@ func (s *Server) startScraperScheduler(cronSpec string, repo *repository.Lottery
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
-		scraperClient := scraper.NewPaisScraper()
-		prizeSeeder := seeder.NewPrizeSeeder(repo)
 		refresh := func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 			defer cancel()
-			results, err := scraperClient.FetchLotteryData()
-			if err != nil {
-				slog.Warn("scraper fetch failed", "error", err)
-				return
-			}
-
-			// Insert only genuinely new draws; existing rows are untouched.
-			inserted, fromD, toD, err := repo.InsertNewDraws(ctx, results)
-			if err != nil {
-				slog.Warn("scraper persist failed", "error", err)
-				return
-			}
-			slog.Info("scraper inserted new lottery results", "inserted", inserted, "fetched", len(results))
-
-			// Invalidate only cache windows overlapping the new draws.
-			if inserted > 0 {
-				manager.InvalidateRange(fromD, toD)
-			}
-
-			// Best-effort prize-amount backfill for draws still missing prizes.
-			prizeCtx, prizeCancel := context.WithTimeout(context.Background(), 90*time.Second)
-			defer prizeCancel()
-			written, pFrom, pTo, err := prizeSeeder.SeedMissingPrizes(prizeCtx, 50)
-			if err != nil {
-				slog.Warn("prize backfill failed", "error", err)
-			} else if written > 0 {
-				slog.Info("prize backfill wrote draws", "written", written)
-				// Prize amounts feed the simulation, so invalidate windows
-				// overlapping the updated draws.
-				manager.InvalidateRange(pFrom, pTo)
+			if _, err := runner.RunOnce(ctx, nil); err != nil {
+				slog.Warn("scheduled scraper run failed", "error", err)
 			}
 		}
 
@@ -228,6 +209,10 @@ func (s *Server) Stop() error {
 	// Stop the scraper goroutine.
 	if s.scraperStop != nil {
 		close(s.scraperStop)
+	}
+
+	if s.scraperConsumer != nil {
+		s.scraperConsumer.Stop()
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

@@ -64,7 +64,11 @@ const defaultTicketCost = 3.0
 // (len(combinations)), not an artificial minimum. A six-number form has
 // exactly one combination, so its per-draw cost is one ticket, not two.
 func (s *LotteryService) Simulate(ctx context.Context, req *lotteryv1.SimulateRequest) (*lotteryv1.SimulateResponse, error) {
-	arch, err := s.archive(ctx, req.GetArchiveWindow())
+	// Load the archive over the union of archive_window and simulate_window:
+	// archive_window is only the draw pool bound here, and a simulate_window
+	// extending past it (e.g. a persisted archive range that ends before the
+	// picked backtest month) would otherwise silently yield zero draws.
+	arch, err := s.archive(ctx, unionWindows(req.GetArchiveWindow(), req.GetSimulateWindow()))
 	if err != nil {
 		slog.Warn("Simulate: failed to load archive", "error", err)
 		return nil, err
@@ -382,6 +386,35 @@ func utilsIntsToInt32s(in []int) []int32 {
 // timestampProto converts a time.Time to a google.protobuf.Timestamp.
 func timestampProto(t time.Time) *timestamppb.Timestamp {
 	return timestamppb.New(t)
+}
+
+// unionWindows returns a DateWindow spanning both input windows — the earliest
+// lower bound and the latest upper bound. An unset bound means "open" and wins
+// in the union. Returns the other window when one input is nil.
+func unionWindows(a, b *lotteryv1.DateWindow) *lotteryv1.DateWindow {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	aFrom, aTo := windowFromProto(a)
+	bFrom, bTo := windowFromProto(b)
+	from, to := aFrom, aTo
+	if bFrom.IsZero() || (!aFrom.IsZero() && bFrom.Before(aFrom)) {
+		from = bFrom
+	}
+	if bTo.IsZero() || (!aTo.IsZero() && bTo.After(aTo)) {
+		to = bTo
+	}
+	w := &lotteryv1.DateWindow{}
+	if !from.IsZero() {
+		w.From = timestamppb.New(from)
+	}
+	if !to.IsZero() {
+		w.To = timestamppb.New(to)
+	}
+	return w
 }
 
 // filterDrawsByWindow returns the draws whose DrawDate falls within [from, to].

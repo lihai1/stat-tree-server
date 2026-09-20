@@ -73,11 +73,27 @@ when `AUTH_ENABLED=true`.
   cron, integrate `robfig/cron` — do not extend the hand-rolled parser.
 - On boot: if `LOTTERY_SEED_ON_BOOT=true` and table empty, seeds from `lotto.data`.
   Scraper failures are logged but do NOT stop startup.
+- On-demand runs: `ScraperConsumer` (`scrape_consumer.go`) consumes the Redis Stream
+  `scraper:requests` via consumer group `scraper-workers` (`XREADGROUP`/`XACK`), then
+  runs `ScraperRunner.RunOnce` with phases `fetch` → `insert` → `prizes`. Progress and
+  terminal state go back to Redis: `scraper:events:{requestId}` stream (1h TTL) +
+  `scraper:status:{requestId}` hash (24h TTL) + `scraper:latest` pointer. On startup the
+  consumer drains pending messages, marking them `interrupted` (`DrainPending`).
 - Scraper inserts only new draws via `InsertNewDraws` (ON CONFLICT DO NOTHING) instead
   of upserting the full CSV every run. Cache invalidation is range-scoped: only
   archive windows overlapping the affected draw dates are cleared.
-- Prize backfill (`prize_seeder.go`) runs best-effort on startup and reports the
-  affected date range so the manager can invalidate only overlapping windows.
+- Prize backfill (`prize_seeder.go`) runs best-effort on startup (one batch of 50) and
+  reports the affected date range so the manager can invalidate only overlapping windows.
+  During a scraper run, `ScraperRunner` drains the backlog in a loop (50-draw batches,
+  capped at `maxPrizeBackfillPerRun` = 2000 per run, stops on first error or empty batch).
+- Backfill candidates are scoped to draws pais.co.il can actually serve:
+  `draw_number >= 2982 AND draw_date >= '2018-01-30'` (`minPrizeDrawNumber` /
+  `minPrizeDrawDate` in `lottery_result_repository.go`). Older draws — including the
+  pre-2018 numbering series (draw_number > ~4000 but old dates) — have no per-draw prize
+  page and keep NULL `prize_amounts`; Simulate falls back to `defaultPrizeAmounts`.
+- `Simulate` loads the archive for the **union** of `archive_window` and
+  `simulate_window` (`unionWindows` in `simulate.go`) before filtering to the simulate
+  window — a backtest range outside the persisted archive window otherwise yields 0 draws.
 
 ## Config (env vars)
 

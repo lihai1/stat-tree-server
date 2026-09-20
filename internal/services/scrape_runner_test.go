@@ -34,26 +34,39 @@ func (m *mockInserter) InsertNewDraws(ctx context.Context, results []models.Lott
 }
 
 type mockInvalidator struct {
-	called bool
-	from   time.Time
-	to     time.Time
+	calls int
+	froms []time.Time
+	tos   []time.Time
 }
 
 func (m *mockInvalidator) InvalidateRange(from, to time.Time) {
-	m.called = true
-	m.from = from
-	m.to = to
+	m.calls++
+	m.froms = append(m.froms, from)
+	m.tos = append(m.tos, to)
 }
 
-type mockSeeder struct {
+type seederResult struct {
 	written int
 	from    time.Time
 	to      time.Time
 	err     error
 }
 
+type mockSeeder struct {
+	results []seederResult // consumed in order; last result repeats if exhausted
+	calls   int
+}
+
 func (m *mockSeeder) SeedMissingPrizes(ctx context.Context, batchSize int) (int, time.Time, time.Time, error) {
-	return m.written, m.from, m.to, m.err
+	m.calls++
+	if len(m.results) == 0 {
+		return 0, time.Time{}, time.Time{}, nil
+	}
+	r := m.results[0]
+	if len(m.results) > 1 {
+		m.results = m.results[1:]
+	}
+	return r.written, r.from, r.to, r.err
 }
 
 var _ = Describe("ScraperRunner", func() {
@@ -68,7 +81,10 @@ var _ = Describe("ScraperRunner", func() {
 		toD := time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC)
 		inserter := &mockInserter{inserted: 2, from: fromD, to: toD}
 		invalidator := &mockInvalidator{}
-		seeder := &mockSeeder{written: 5, from: fromD, to: toD}
+		seeder := &mockSeeder{results: []seederResult{
+			{written: 5, from: fromD, to: toD},
+			{written: 0},
+		}}
 
 		runner := services.NewScraperRunner(fetcher, inserter, invalidator, seeder)
 
@@ -81,7 +97,60 @@ var _ = Describe("ScraperRunner", func() {
 		Expect(res.Inserted).To(Equal(2))
 		Expect(res.PrizesWritten).To(Equal(5))
 		Expect(phases).To(Equal([]string{"fetch", "insert", "prizes"}))
-		Expect(invalidator.called).To(BeTrue())
+		Expect(invalidator.calls).To(Equal(2))
+	})
+
+	It("should drain prizes across multiple batches until empty", func() {
+		fetcher := &mockFetcher{results: []models.LotteryResult{{DrawNumber: 3000}}}
+		inserter := &mockInserter{inserted: 1}
+		invalidator := &mockInvalidator{}
+		d1 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		d2 := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+		d3 := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+		seeder := &mockSeeder{results: []seederResult{
+			{written: 50, from: d1, to: d1},
+			{written: 50, from: d2, to: d2},
+			{written: 12, from: d3, to: d3},
+			{written: 0},
+		}}
+
+		runner := services.NewScraperRunner(fetcher, inserter, invalidator, seeder)
+		res, err := runner.RunOnce(context.Background(), nil)
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res.PrizesWritten).To(Equal(112))
+		Expect(seeder.calls).To(Equal(4))
+		Expect(invalidator.calls).To(Equal(4)) // 1 for insert + 3 batch ranges
+		Expect(invalidator.tos).To(Equal([]time.Time{time.Time{}, d1, d2, d3}))
+	})
+
+	It("should stop prize drain on error and keep best-effort", func() {
+		fetcher := &mockFetcher{results: []models.LotteryResult{{DrawNumber: 3000}}}
+		inserter := &mockInserter{inserted: 1}
+		seeder := &mockSeeder{results: []seederResult{
+			{written: 50},
+			{err: errors.New("pais unreachable")},
+		}}
+
+		runner := services.NewScraperRunner(fetcher, inserter, nil, seeder)
+		res, err := runner.RunOnce(context.Background(), nil)
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res.PrizesWritten).To(Equal(50))
+		Expect(seeder.calls).To(Equal(2))
+	})
+
+	It("should cap prize drain at maxPrizeBackfillPerRun", func() {
+		fetcher := &mockFetcher{results: []models.LotteryResult{{DrawNumber: 3000}}}
+		inserter := &mockInserter{inserted: 1}
+		seeder := &mockSeeder{results: []seederResult{{written: 50}}}
+
+		runner := services.NewScraperRunner(fetcher, inserter, nil, seeder)
+		res, err := runner.RunOnce(context.Background(), nil)
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res.PrizesWritten).To(Equal(2000))
+		Expect(seeder.calls).To(Equal(40))
 	})
 
 	It("should handle fetcher error cleanly", func() {

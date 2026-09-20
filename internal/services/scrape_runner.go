@@ -10,6 +10,11 @@ import (
 	"github.com/lihai1/stat-tree-server/internal/models"
 )
 
+const (
+	prizeBackfillBatchSize = 50   // draws per SeedMissingPrizes call
+	maxPrizeBackfillPerRun = 2000 // safety cap; covers the full reachable backlog in one run
+)
+
 type LotteryDataFetcher interface {
 	FetchLotteryData() ([]models.LotteryResult, error)
 }
@@ -85,16 +90,23 @@ func (r *ScraperRunner) RunOnce(ctx context.Context, onPhase func(phase string))
 		onPhase("prizes")
 	}
 	if r.seeder != nil {
-		written, pFrom, pTo, pErr := r.seeder.SeedMissingPrizes(ctx, 50)
-		if pErr != nil {
-			slog.Warn("ScraperRunner: prize backfill warning", "error", pErr)
-		} else if written > 0 {
-			res.PrizesWritten = written
-			slog.Info("ScraperRunner: prize backfill wrote draws", "written", written)
+		total := 0
+		for total < maxPrizeBackfillPerRun {
+			written, pFrom, pTo, pErr := r.seeder.SeedMissingPrizes(ctx, prizeBackfillBatchSize)
+			if pErr != nil {
+				slog.Warn("ScraperRunner: prize backfill warning", "error", pErr)
+				break
+			}
+			if written == 0 {
+				break
+			}
+			total += written
 			if r.invalidator != nil {
 				r.invalidator.InvalidateRange(pFrom, pTo)
 			}
 		}
+		res.PrizesWritten = total
+		slog.Info("ScraperRunner: prize backfill complete", "written", total)
 	}
 
 	return res, nil

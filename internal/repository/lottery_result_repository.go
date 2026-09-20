@@ -11,6 +11,14 @@ import (
 	"github.com/lihai1/stat-tree-server/internal/models"
 )
 
+// pais.co.il exposes per-draw prize pages only for the modern lotto format:
+// lotteryId >= 2982 (drawn 2018-01-30). Draws with higher numbers but older
+// dates are the pre-2018 numbering series and have no prize page.
+const (
+	minPrizeDrawNumber = 2982
+	minPrizeDrawDate   = "2018-01-30"
+)
+
 type LotteryResultRepository struct {
 	pool *pgxpool.Pool
 }
@@ -405,7 +413,7 @@ func (r *LotteryResultRepository) UpdatePrizeAmounts(ctx context.Context, drawNu
 // GetDrawsWithoutPrizes returns draw numbers that have no prize_amounts set,
 // ordered by draw_number ascending. Limit caps the result count (0 = no limit).
 func (r *LotteryResultRepository) GetDrawsWithoutPrizes(ctx context.Context, limit int) ([]int, error) {
-	query := `SELECT draw_number FROM lottery_results WHERE prize_amounts IS NULL AND strong BETWEEN 1 AND 7 ORDER BY draw_date DESC`
+	query := fmt.Sprintf(`SELECT draw_number FROM lottery_results WHERE prize_amounts IS NULL AND strong BETWEEN 1 AND 7 AND draw_number >= %d AND draw_date >= '%s' ORDER BY draw_date DESC`, minPrizeDrawNumber, minPrizeDrawDate)
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", limit)
 	}
@@ -434,7 +442,7 @@ func (r *LotteryResultRepository) GetDrawsWithoutPrizes(ctx context.Context, lim
 // each draw's date, so the prize backfill can report the affected date range
 // to the cache manager for range-scoped invalidation.
 func (r *LotteryResultRepository) GetDrawsWithoutPrizeRefs(ctx context.Context, limit int) ([]models.DrawRef, error) {
-	query := `SELECT draw_number, draw_date FROM lottery_results WHERE prize_amounts IS NULL AND strong BETWEEN 1 AND 7 ORDER BY draw_date DESC`
+	query := fmt.Sprintf(`SELECT draw_number, draw_date FROM lottery_results WHERE prize_amounts IS NULL AND strong BETWEEN 1 AND 7 AND draw_number >= %d AND draw_date >= '%s' ORDER BY draw_date DESC`, minPrizeDrawNumber, minPrizeDrawDate)
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", limit)
 	}

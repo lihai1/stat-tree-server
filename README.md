@@ -289,7 +289,7 @@ The application uses the repository pattern for data access:
   - `GetByDateRange` — fetch draws in a date window (used by `LotteryManager`)
   - `InsertNewDraws` — insert-only with ON CONFLICT DO NOTHING, returns affected date range
   - `UpdatePrizeAmounts` — update prize data for a draw, returns the draw date
-  - `GetDrawsWithoutPrizeRefs` — returns draw number/date pairs missing prize data
+  - `GetDrawsWithoutPrizeRefs` — returns draw number/date pairs missing prize data, scoped to draws pais.co.il can serve (`draw_number >= 2982 AND draw_date >= '2018-01-30'`; older draws have no per-draw prize page)
 
 > UserRepository and SavedFormRepository have been removed — user data is
 > owned by the Java BFF and Keycloak.

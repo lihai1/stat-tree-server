@@ -5,6 +5,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/lihai1/stat-tree-server/internal/services"
 	lotteryv1 "github.com/lihai1/stat-tree-server/pkg/gen"
@@ -64,28 +66,28 @@ var _ = Describe("LotteryService", func() {
 		})
 
 		Context("with empty request", func() {
-			It("should handle empty request", func() {
+			It("should reject empty request", func() {
 				req := &lotteryv1.GenerateFormRequest{}
 
 				resp, err := service.GenerateForm(ctx, req)
 
-				Expect(err).ToNot(HaveOccurred())
-				Expect(resp).ToNot(BeNil())
+				Expect(err).To(HaveOccurred())
+				Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+				Expect(resp).To(BeNil())
 			})
 		})
 
 		Context("with negative how_many", func() {
-			It("should return at least one form for negative how_many", func() {
+			It("should reject negative how_many", func() {
 				req := &lotteryv1.GenerateFormRequest{
 					HowMany: -1,
 				}
 
 				resp, err := service.GenerateForm(ctx, req)
 
-				Expect(err).ToNot(HaveOccurred())
-				Expect(resp).ToNot(BeNil())
-				// negative howMany defaults to 1
-				Expect(resp.GetForms()).ToNot(BeEmpty())
+				Expect(err).To(HaveOccurred())
+				Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+				Expect(resp).To(BeNil())
 			})
 		})
 	})
@@ -204,7 +206,7 @@ var _ = Describe("LotteryService", func() {
 				Expect(resp.GetFrequencyGroups()).To(HaveLen(6))
 			})
 
-			It("should populate group size correctly (combos computed by UI)", func() {
+			It("should populate group size and combos correctly", func() {
 				req := &lotteryv1.AnalyzeRequest{
 					Form: []int32{1, 2, 3, 4, 5, 6},
 				}
@@ -212,12 +214,11 @@ var _ = Describe("LotteryService", func() {
 				resp, err := service.Analyze(ctx, req)
 
 				Expect(err).ToNot(HaveOccurred())
-				groups := resp.GetFrequencyGroups()
-				for i, g := range groups {
+				// Combos = C(37, size) per the documented proto contract.
+				expected := []int32{37, 666, 7770, 66045, 435897, 2324784}
+				for i, g := range resp.GetFrequencyGroups() {
 					Expect(g.GetSize()).To(Equal(int32(i + 1)))
-					// Combos is 0 from the tree — the UI computes it via
-					// combinations(37, size) with a || fallback.
-					Expect(g.GetCombos()).To(Equal(int32(0)))
+					Expect(g.GetCombos()).To(Equal(expected[i]))
 				}
 			})
 
@@ -241,6 +242,31 @@ var _ = Describe("LotteryService", func() {
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp).ToNot(BeNil())
+			})
+		})
+
+		Context("ScoreForm", func() {
+			It("should score a form without error (empty archive → heat 0)", func() {
+				req := &lotteryv1.ScoreFormRequest{
+					Form: []int32{1, 2, 3, 4, 5, 6},
+				}
+
+				resp, err := service.ScoreForm(ctx, req)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp).ToNot(BeNil())
+				Expect(resp.GetPairCount()).To(Equal(int32(15))) // C(6,2)
+				Expect(resp.GetDraws()).To(Equal(int32(0)))
+				Expect(resp.GetHeat()).To(Equal(0.0))
+			})
+
+			It("should reject a form with fewer than 2 numbers", func() {
+				req := &lotteryv1.ScoreFormRequest{Form: []int32{7}}
+
+				_, err := service.ScoreForm(ctx, req)
+
+				Expect(err).To(HaveOccurred())
+				Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
 			})
 		})
 

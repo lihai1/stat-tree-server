@@ -25,16 +25,15 @@ var _ = Describe("HTTP Server Integration Tests", func() {
 			Expect(resp.GetForms()).NotTo(BeNil())
 		})
 
-		It("should handle invalid how_many", func() {
+		It("should reject non-positive how_many", func() {
 			ctx := context.Background()
 			req := &lotteryv1.GenerateFormRequest{
 				HowMany: -1,
 			}
 
 			resp, err := httpClient.GenerateForm(ctx, req)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(resp).NotTo(BeNil())
-			Expect(resp.GetForms()).To(BeEmpty())
+			Expect(err).To(HaveOccurred())
+			Expect(resp).To(BeNil())
 		})
 	})
 

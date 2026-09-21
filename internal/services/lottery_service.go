@@ -10,6 +10,8 @@ import (
 	"github.com/lihai1/stat-tree-server/internal/repository"
 	"github.com/lihai1/stat-tree-server/internal/utils"
 	lotteryv1 "github.com/lihai1/stat-tree-server/pkg/gen"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const version = "1.0.0"
@@ -97,7 +99,7 @@ func (s *LotteryService) HealthCheck(ctx context.Context, req *lotteryv1.HealthC
 func (s *LotteryService) GenerateForm(ctx context.Context, req *lotteryv1.GenerateFormRequest) (*lotteryv1.GenerateFormResponse, error) {
 	howMany := int(req.GetHowMany())
 	if howMany <= 0 {
-		howMany = 1
+		return nil, status.Error(codes.InvalidArgument, "how_many must be positive")
 	}
 	if howMany > 50 {
 		howMany = 50
@@ -193,6 +195,22 @@ func (s *LotteryService) Analyze(ctx context.Context, req *lotteryv1.AnalyzeRequ
 
 	numbers := utils.Int32sToInts(req.GetForm())
 	return arch.AnalyzeForm(numbers), nil
+}
+
+// ScoreForm returns an absolute heat index for the form: how often its
+// pairs co-occurred in the window vs. the random expectation (×100).
+func (s *LotteryService) ScoreForm(ctx context.Context, req *lotteryv1.ScoreFormRequest) (*lotteryv1.ScoreFormResponse, error) {
+	arch, err := s.archive(ctx, req.GetWindow())
+	if err != nil {
+		slog.Warn("ScoreForm: failed to load archive", "error", err)
+		return nil, err
+	}
+
+	numbers := utils.Int32sToInts(req.GetForm())
+	if len(numbers) < 2 {
+		return nil, status.Error(codes.InvalidArgument, "form must contain at least 2 numbers")
+	}
+	return arch.ScoreForm(numbers), nil
 }
 
 // strengthMode maps the proto Strength enum to the lottery-tree mode string

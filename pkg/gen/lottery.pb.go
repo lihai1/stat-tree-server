@@ -718,6 +718,143 @@ func (x *FrequencyGroup) GetEntries() []*FrequencyEntry {
 	return nil
 }
 
+// ScoreFormRequest carries the numbers to score plus an optional window.
+type ScoreFormRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The user's selected numbers to score (at least 2).
+	Form []int32 `protobuf:"varint,1,rep,packed,name=form,proto3" json:"form,omitempty"`
+	// Optional historical window. Unset = full archive.
+	Window        *DateWindow `protobuf:"bytes,2,opt,name=window,proto3" json:"window,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScoreFormRequest) Reset() {
+	*x = ScoreFormRequest{}
+	mi := &file_lottery_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScoreFormRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScoreFormRequest) ProtoMessage() {}
+
+func (x *ScoreFormRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_lottery_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScoreFormRequest.ProtoReflect.Descriptor instead.
+func (*ScoreFormRequest) Descriptor() ([]byte, []int) {
+	return file_lottery_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ScoreFormRequest) GetForm() []int32 {
+	if x != nil {
+		return x.Form
+	}
+	return nil
+}
+
+func (x *ScoreFormRequest) GetWindow() *DateWindow {
+	if x != nil {
+		return x.Window
+	}
+	return nil
+}
+
+// ScoreFormResponse is the absolute heat index plus its raw components.
+type ScoreFormResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// observed_pair_hits / expected_pair_hits × 100. 100 = random average.
+	Heat float64 `protobuf:"fixed64,1,opt,name=heat,proto3" json:"heat,omitempty"`
+	// Sum of occurrence counts of the set's pairs in the window.
+	ObservedPairHits int64 `protobuf:"varint,2,opt,name=observed_pair_hits,json=observedPairHits,proto3" json:"observed_pair_hits,omitempty"`
+	// draws × C(len(form),2) × C(6,2)/C(MaxNumber,2).
+	ExpectedPairHits float64 `protobuf:"fixed64,3,opt,name=expected_pair_hits,json=expectedPairHits,proto3" json:"expected_pair_hits,omitempty"`
+	// Number of draws in the archive window.
+	Draws int32 `protobuf:"varint,4,opt,name=draws,proto3" json:"draws,omitempty"`
+	// C(len(form), 2) — number of pairs the score averages over.
+	PairCount     int32 `protobuf:"varint,5,opt,name=pair_count,json=pairCount,proto3" json:"pair_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScoreFormResponse) Reset() {
+	*x = ScoreFormResponse{}
+	mi := &file_lottery_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScoreFormResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScoreFormResponse) ProtoMessage() {}
+
+func (x *ScoreFormResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_lottery_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScoreFormResponse.ProtoReflect.Descriptor instead.
+func (*ScoreFormResponse) Descriptor() ([]byte, []int) {
+	return file_lottery_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ScoreFormResponse) GetHeat() float64 {
+	if x != nil {
+		return x.Heat
+	}
+	return 0
+}
+
+func (x *ScoreFormResponse) GetObservedPairHits() int64 {
+	if x != nil {
+		return x.ObservedPairHits
+	}
+	return 0
+}
+
+func (x *ScoreFormResponse) GetExpectedPairHits() float64 {
+	if x != nil {
+		return x.ExpectedPairHits
+	}
+	return 0
+}
+
+func (x *ScoreFormResponse) GetDraws() int32 {
+	if x != nil {
+		return x.Draws
+	}
+	return 0
+}
+
+func (x *ScoreFormResponse) GetPairCount() int32 {
+	if x != nil {
+		return x.PairCount
+	}
+	return 0
+}
+
 // HealthCheckRequest is an empty request for health check.
 type HealthCheckRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -727,7 +864,7 @@ type HealthCheckRequest struct {
 
 func (x *HealthCheckRequest) Reset() {
 	*x = HealthCheckRequest{}
-	mi := &file_lottery_proto_msgTypes[11]
+	mi := &file_lottery_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -739,7 +876,7 @@ func (x *HealthCheckRequest) String() string {
 func (*HealthCheckRequest) ProtoMessage() {}
 
 func (x *HealthCheckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[11]
+	mi := &file_lottery_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -752,7 +889,7 @@ func (x *HealthCheckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthCheckRequest.ProtoReflect.Descriptor instead.
 func (*HealthCheckRequest) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{11}
+	return file_lottery_proto_rawDescGZIP(), []int{13}
 }
 
 // HealthCheckResponse contains the health status of the service.
@@ -767,7 +904,7 @@ type HealthCheckResponse struct {
 
 func (x *HealthCheckResponse) Reset() {
 	*x = HealthCheckResponse{}
-	mi := &file_lottery_proto_msgTypes[12]
+	mi := &file_lottery_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -779,7 +916,7 @@ func (x *HealthCheckResponse) String() string {
 func (*HealthCheckResponse) ProtoMessage() {}
 
 func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[12]
+	mi := &file_lottery_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -792,7 +929,7 @@ func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthCheckResponse.ProtoReflect.Descriptor instead.
 func (*HealthCheckResponse) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{12}
+	return file_lottery_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *HealthCheckResponse) GetStatus() string {
@@ -853,7 +990,7 @@ type SimulateRequest struct {
 
 func (x *SimulateRequest) Reset() {
 	*x = SimulateRequest{}
-	mi := &file_lottery_proto_msgTypes[13]
+	mi := &file_lottery_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -865,7 +1002,7 @@ func (x *SimulateRequest) String() string {
 func (*SimulateRequest) ProtoMessage() {}
 
 func (x *SimulateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[13]
+	mi := &file_lottery_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -878,7 +1015,7 @@ func (x *SimulateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimulateRequest.ProtoReflect.Descriptor instead.
 func (*SimulateRequest) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{13}
+	return file_lottery_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SimulateRequest) GetForm() []int32 {
@@ -941,7 +1078,7 @@ type SimulateTierHit struct {
 
 func (x *SimulateTierHit) Reset() {
 	*x = SimulateTierHit{}
-	mi := &file_lottery_proto_msgTypes[14]
+	mi := &file_lottery_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -953,7 +1090,7 @@ func (x *SimulateTierHit) String() string {
 func (*SimulateTierHit) ProtoMessage() {}
 
 func (x *SimulateTierHit) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[14]
+	mi := &file_lottery_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -966,7 +1103,7 @@ func (x *SimulateTierHit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimulateTierHit.ProtoReflect.Descriptor instead.
 func (*SimulateTierHit) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{14}
+	return file_lottery_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *SimulateTierHit) GetTier() int32 {
@@ -1020,7 +1157,7 @@ type SimulateDrawResult struct {
 
 func (x *SimulateDrawResult) Reset() {
 	*x = SimulateDrawResult{}
-	mi := &file_lottery_proto_msgTypes[15]
+	mi := &file_lottery_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1032,7 +1169,7 @@ func (x *SimulateDrawResult) String() string {
 func (*SimulateDrawResult) ProtoMessage() {}
 
 func (x *SimulateDrawResult) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[15]
+	mi := &file_lottery_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1045,7 +1182,7 @@ func (x *SimulateDrawResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimulateDrawResult.ProtoReflect.Descriptor instead.
 func (*SimulateDrawResult) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{15}
+	return file_lottery_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SimulateDrawResult) GetDrawNumber() int32 {
@@ -1122,7 +1259,7 @@ type SimulateTierSummary struct {
 
 func (x *SimulateTierSummary) Reset() {
 	*x = SimulateTierSummary{}
-	mi := &file_lottery_proto_msgTypes[16]
+	mi := &file_lottery_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1134,7 +1271,7 @@ func (x *SimulateTierSummary) String() string {
 func (*SimulateTierSummary) ProtoMessage() {}
 
 func (x *SimulateTierSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[16]
+	mi := &file_lottery_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1147,7 +1284,7 @@ func (x *SimulateTierSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimulateTierSummary.ProtoReflect.Descriptor instead.
 func (*SimulateTierSummary) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{16}
+	return file_lottery_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SimulateTierSummary) GetTier() int32 {
@@ -1198,7 +1335,7 @@ type SimulateSummary struct {
 
 func (x *SimulateSummary) Reset() {
 	*x = SimulateSummary{}
-	mi := &file_lottery_proto_msgTypes[17]
+	mi := &file_lottery_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1210,7 +1347,7 @@ func (x *SimulateSummary) String() string {
 func (*SimulateSummary) ProtoMessage() {}
 
 func (x *SimulateSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[17]
+	mi := &file_lottery_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1223,7 +1360,7 @@ func (x *SimulateSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimulateSummary.ProtoReflect.Descriptor instead.
 func (*SimulateSummary) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{17}
+	return file_lottery_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SimulateSummary) GetTotalDraws() int32 {
@@ -1287,7 +1424,7 @@ type SimulateResponse struct {
 
 func (x *SimulateResponse) Reset() {
 	*x = SimulateResponse{}
-	mi := &file_lottery_proto_msgTypes[18]
+	mi := &file_lottery_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1299,7 +1436,7 @@ func (x *SimulateResponse) String() string {
 func (*SimulateResponse) ProtoMessage() {}
 
 func (x *SimulateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[18]
+	mi := &file_lottery_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1312,7 +1449,7 @@ func (x *SimulateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimulateResponse.ProtoReflect.Descriptor instead.
 func (*SimulateResponse) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{18}
+	return file_lottery_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SimulateResponse) GetDraws() []*SimulateDrawResult {
@@ -1374,7 +1511,17 @@ const file_lottery_proto_rawDesc = "" +
 	"\x0eFrequencyGroup\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x16\n" +
 	"\x06combos\x18\x02 \x01(\x05R\x06combos\x124\n" +
-	"\aentries\x18\x03 \x03(\v2\x1a.lottery.v1.FrequencyEntryR\aentries\"\x14\n" +
+	"\aentries\x18\x03 \x03(\v2\x1a.lottery.v1.FrequencyEntryR\aentries\"V\n" +
+	"\x10ScoreFormRequest\x12\x12\n" +
+	"\x04form\x18\x01 \x03(\x05R\x04form\x12.\n" +
+	"\x06window\x18\x02 \x01(\v2\x16.lottery.v1.DateWindowR\x06window\"\xb8\x01\n" +
+	"\x11ScoreFormResponse\x12\x12\n" +
+	"\x04heat\x18\x01 \x01(\x01R\x04heat\x12,\n" +
+	"\x12observed_pair_hits\x18\x02 \x01(\x03R\x10observedPairHits\x12,\n" +
+	"\x12expected_pair_hits\x18\x03 \x01(\x01R\x10expectedPairHits\x12\x14\n" +
+	"\x05draws\x18\x04 \x01(\x05R\x05draws\x12\x1d\n" +
+	"\n" +
+	"pair_count\x18\x05 \x01(\x05R\tpairCount\"\x14\n" +
 	"\x12HealthCheckRequest\"j\n" +
 	"\x13HealthCheckResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x18\n" +
@@ -1427,12 +1574,13 @@ const file_lottery_proto_rawDesc = "" +
 	"\x14STRENGTH_UNSPECIFIED\x10\x00\x12\b\n" +
 	"\x04WEAK\x10\x01\x12\n" +
 	"\n" +
-	"\x06STRONG\x10\x022\xa9\x04\n" +
+	"\x06STRONG\x10\x022\x8f\x05\n" +
 	"\x0eLotteryService\x12_\n" +
 	"\vHealthCheck\x12\x1e.lottery.v1.HealthCheckRequest\x1a\x1f.lottery.v1.HealthCheckResponse\"\x0f\x82\xd3\xe4\x93\x02\t\x12\a/health\x12p\n" +
 	"\fGenerateForm\x12\x1f.lottery.v1.GenerateFormRequest\x1a .lottery.v1.GenerateFormResponse\"\x1d\x82\xd3\xe4\x93\x02\x17:\x01*\"\x12/api/generate/form\x12t\n" +
 	"\rGetStatistics\x12 .lottery.v1.GetStatisticsRequest\x1a!.lottery.v1.GetStatisticsResponse\"\x1e\x82\xd3\xe4\x93\x02\x18:\x01*\"\x13/api/generate/pares\x12d\n" +
-	"\aAnalyze\x12\x1a.lottery.v1.AnalyzeRequest\x1a\x1b.lottery.v1.AnalyzeResponse\" \x82\xd3\xe4\x93\x02\x1a:\x01*\"\x15/api/generate/analyze\x12h\n" +
+	"\aAnalyze\x12\x1a.lottery.v1.AnalyzeRequest\x1a\x1b.lottery.v1.AnalyzeResponse\" \x82\xd3\xe4\x93\x02\x1a:\x01*\"\x15/api/generate/analyze\x12d\n" +
+	"\tScoreForm\x12\x1c.lottery.v1.ScoreFormRequest\x1a\x1d.lottery.v1.ScoreFormResponse\"\x1a\x82\xd3\xe4\x93\x02\x14:\x01*\"\x0f/api/score/form\x12h\n" +
 	"\bSimulate\x12\x1b.lottery.v1.SimulateRequest\x1a\x1c.lottery.v1.SimulateResponse\"!\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/api/generate/simulateBU\n" +
 	"\x1bcom.statistiloto.lottery.v1P\x01Z4github.com/lihai1/stat-tree-server/pkg/gen;lotteryv1b\x06proto3"
 
@@ -1449,7 +1597,7 @@ func file_lottery_proto_rawDescGZIP() []byte {
 }
 
 var file_lottery_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_lottery_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_lottery_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_lottery_proto_goTypes = []any{
 	(Strength)(0),                 // 0: lottery.v1.Strength
 	(*DateWindow)(nil),            // 1: lottery.v1.DateWindow
@@ -1463,19 +1611,21 @@ var file_lottery_proto_goTypes = []any{
 	(*AnalyzeResponse)(nil),       // 9: lottery.v1.AnalyzeResponse
 	(*FrequencyEntry)(nil),        // 10: lottery.v1.FrequencyEntry
 	(*FrequencyGroup)(nil),        // 11: lottery.v1.FrequencyGroup
-	(*HealthCheckRequest)(nil),    // 12: lottery.v1.HealthCheckRequest
-	(*HealthCheckResponse)(nil),   // 13: lottery.v1.HealthCheckResponse
-	(*SimulateRequest)(nil),       // 14: lottery.v1.SimulateRequest
-	(*SimulateTierHit)(nil),       // 15: lottery.v1.SimulateTierHit
-	(*SimulateDrawResult)(nil),    // 16: lottery.v1.SimulateDrawResult
-	(*SimulateTierSummary)(nil),   // 17: lottery.v1.SimulateTierSummary
-	(*SimulateSummary)(nil),       // 18: lottery.v1.SimulateSummary
-	(*SimulateResponse)(nil),      // 19: lottery.v1.SimulateResponse
-	(*timestamppb.Timestamp)(nil), // 20: google.protobuf.Timestamp
+	(*ScoreFormRequest)(nil),      // 12: lottery.v1.ScoreFormRequest
+	(*ScoreFormResponse)(nil),     // 13: lottery.v1.ScoreFormResponse
+	(*HealthCheckRequest)(nil),    // 14: lottery.v1.HealthCheckRequest
+	(*HealthCheckResponse)(nil),   // 15: lottery.v1.HealthCheckResponse
+	(*SimulateRequest)(nil),       // 16: lottery.v1.SimulateRequest
+	(*SimulateTierHit)(nil),       // 17: lottery.v1.SimulateTierHit
+	(*SimulateDrawResult)(nil),    // 18: lottery.v1.SimulateDrawResult
+	(*SimulateTierSummary)(nil),   // 19: lottery.v1.SimulateTierSummary
+	(*SimulateSummary)(nil),       // 20: lottery.v1.SimulateSummary
+	(*SimulateResponse)(nil),      // 21: lottery.v1.SimulateResponse
+	(*timestamppb.Timestamp)(nil), // 22: google.protobuf.Timestamp
 }
 var file_lottery_proto_depIdxs = []int32{
-	20, // 0: lottery.v1.DateWindow.from:type_name -> google.protobuf.Timestamp
-	20, // 1: lottery.v1.DateWindow.to:type_name -> google.protobuf.Timestamp
+	22, // 0: lottery.v1.DateWindow.from:type_name -> google.protobuf.Timestamp
+	22, // 1: lottery.v1.DateWindow.to:type_name -> google.protobuf.Timestamp
 	1,  // 2: lottery.v1.GenerateFormRequest.window:type_name -> lottery.v1.DateWindow
 	0,  // 3: lottery.v1.GenerateFormRequest.strength:type_name -> lottery.v1.Strength
 	3,  // 4: lottery.v1.GenerateFormResponse.forms:type_name -> lottery.v1.NumberSet
@@ -1485,28 +1635,31 @@ var file_lottery_proto_depIdxs = []int32{
 	1,  // 8: lottery.v1.AnalyzeRequest.window:type_name -> lottery.v1.DateWindow
 	11, // 9: lottery.v1.AnalyzeResponse.frequency_groups:type_name -> lottery.v1.FrequencyGroup
 	10, // 10: lottery.v1.FrequencyGroup.entries:type_name -> lottery.v1.FrequencyEntry
-	1,  // 11: lottery.v1.SimulateRequest.archive_window:type_name -> lottery.v1.DateWindow
-	1,  // 12: lottery.v1.SimulateRequest.simulate_window:type_name -> lottery.v1.DateWindow
-	20, // 13: lottery.v1.SimulateDrawResult.draw_date:type_name -> google.protobuf.Timestamp
-	15, // 14: lottery.v1.SimulateDrawResult.tier_hits:type_name -> lottery.v1.SimulateTierHit
-	17, // 15: lottery.v1.SimulateSummary.tier_summaries:type_name -> lottery.v1.SimulateTierSummary
-	16, // 16: lottery.v1.SimulateResponse.draws:type_name -> lottery.v1.SimulateDrawResult
-	18, // 17: lottery.v1.SimulateResponse.summary:type_name -> lottery.v1.SimulateSummary
-	12, // 18: lottery.v1.LotteryService.HealthCheck:input_type -> lottery.v1.HealthCheckRequest
-	2,  // 19: lottery.v1.LotteryService.GenerateForm:input_type -> lottery.v1.GenerateFormRequest
-	5,  // 20: lottery.v1.LotteryService.GetStatistics:input_type -> lottery.v1.GetStatisticsRequest
-	8,  // 21: lottery.v1.LotteryService.Analyze:input_type -> lottery.v1.AnalyzeRequest
-	14, // 22: lottery.v1.LotteryService.Simulate:input_type -> lottery.v1.SimulateRequest
-	13, // 23: lottery.v1.LotteryService.HealthCheck:output_type -> lottery.v1.HealthCheckResponse
-	4,  // 24: lottery.v1.LotteryService.GenerateForm:output_type -> lottery.v1.GenerateFormResponse
-	7,  // 25: lottery.v1.LotteryService.GetStatistics:output_type -> lottery.v1.GetStatisticsResponse
-	9,  // 26: lottery.v1.LotteryService.Analyze:output_type -> lottery.v1.AnalyzeResponse
-	19, // 27: lottery.v1.LotteryService.Simulate:output_type -> lottery.v1.SimulateResponse
-	23, // [23:28] is the sub-list for method output_type
-	18, // [18:23] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	1,  // 11: lottery.v1.ScoreFormRequest.window:type_name -> lottery.v1.DateWindow
+	1,  // 12: lottery.v1.SimulateRequest.archive_window:type_name -> lottery.v1.DateWindow
+	1,  // 13: lottery.v1.SimulateRequest.simulate_window:type_name -> lottery.v1.DateWindow
+	22, // 14: lottery.v1.SimulateDrawResult.draw_date:type_name -> google.protobuf.Timestamp
+	17, // 15: lottery.v1.SimulateDrawResult.tier_hits:type_name -> lottery.v1.SimulateTierHit
+	19, // 16: lottery.v1.SimulateSummary.tier_summaries:type_name -> lottery.v1.SimulateTierSummary
+	18, // 17: lottery.v1.SimulateResponse.draws:type_name -> lottery.v1.SimulateDrawResult
+	20, // 18: lottery.v1.SimulateResponse.summary:type_name -> lottery.v1.SimulateSummary
+	14, // 19: lottery.v1.LotteryService.HealthCheck:input_type -> lottery.v1.HealthCheckRequest
+	2,  // 20: lottery.v1.LotteryService.GenerateForm:input_type -> lottery.v1.GenerateFormRequest
+	5,  // 21: lottery.v1.LotteryService.GetStatistics:input_type -> lottery.v1.GetStatisticsRequest
+	8,  // 22: lottery.v1.LotteryService.Analyze:input_type -> lottery.v1.AnalyzeRequest
+	12, // 23: lottery.v1.LotteryService.ScoreForm:input_type -> lottery.v1.ScoreFormRequest
+	16, // 24: lottery.v1.LotteryService.Simulate:input_type -> lottery.v1.SimulateRequest
+	15, // 25: lottery.v1.LotteryService.HealthCheck:output_type -> lottery.v1.HealthCheckResponse
+	4,  // 26: lottery.v1.LotteryService.GenerateForm:output_type -> lottery.v1.GenerateFormResponse
+	7,  // 27: lottery.v1.LotteryService.GetStatistics:output_type -> lottery.v1.GetStatisticsResponse
+	9,  // 28: lottery.v1.LotteryService.Analyze:output_type -> lottery.v1.AnalyzeResponse
+	13, // 29: lottery.v1.LotteryService.ScoreForm:output_type -> lottery.v1.ScoreFormResponse
+	21, // 30: lottery.v1.LotteryService.Simulate:output_type -> lottery.v1.SimulateResponse
+	25, // [25:31] is the sub-list for method output_type
+	19, // [19:25] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_lottery_proto_init() }
@@ -1521,7 +1674,7 @@ func file_lottery_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_lottery_proto_rawDesc), len(file_lottery_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   19,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

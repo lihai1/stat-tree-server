@@ -3,13 +3,14 @@ package http
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/lihai1/stat-tree-server/pkg/clients"
 	lotteryv1 "github.com/lihai1/stat-tree-server/pkg/gen"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 // Client implements the LotteryClient interface using HTTP
@@ -72,8 +73,8 @@ func (c *Client) Close() error {
 }
 
 // doRequest performs an HTTP request to the lottery service
-func (c *Client) doRequest(ctx context.Context, path string, req interface{}, resp interface{}) error {
-	body, err := json.Marshal(req)
+func (c *Client) doRequest(ctx context.Context, path string, req proto.Message, resp proto.Message) error {
+	body, err := protojson.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
@@ -102,7 +103,7 @@ func (c *Client) doRequest(ctx context.Context, path string, req interface{}, re
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if err := json.Unmarshal(respBody, resp); err != nil {
+	if err := protojson.Unmarshal(respBody, resp); err != nil {
 		return fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
@@ -110,7 +111,7 @@ func (c *Client) doRequest(ctx context.Context, path string, req interface{}, re
 }
 
 // doGetRequest performs an HTTP GET request to the lottery service
-func (c *Client) doGetRequest(ctx context.Context, path string, resp interface{}) error {
+func (c *Client) doGetRequest(ctx context.Context, path string, resp proto.Message) error {
 	url := c.baseURL + path
 	httpReq, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -133,7 +134,7 @@ func (c *Client) doGetRequest(ctx context.Context, path string, resp interface{}
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if err := json.Unmarshal(respBody, resp); err != nil {
+	if err := protojson.Unmarshal(respBody, resp); err != nil {
 		return fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 

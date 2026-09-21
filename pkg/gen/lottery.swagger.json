@@ -153,6 +153,40 @@
         ]
       }
     },
+    "/api/score/form": {
+      "post": {
+        "summary": "ScoreForm computes an absolute \"heat index\" for a set: observed pair\nco-occurrences vs. the random expectation over the window (×100).",
+        "operationId": "LotteryService_ScoreForm",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ScoreFormResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "ScoreFormRequest carries the numbers to score plus an optional window.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1ScoreFormRequest"
+            }
+          }
+        ],
+        "tags": [
+          "LotteryService"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "summary": "HealthCheck returns the health status of the service.",
@@ -436,6 +470,55 @@
         }
       },
       "description": "Pair is a frequent number group with its occurrence count."
+    },
+    "v1ScoreFormRequest": {
+      "type": "object",
+      "properties": {
+        "form": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "description": "The user's selected numbers to score (at least 2)."
+        },
+        "window": {
+          "$ref": "#/definitions/v1DateWindow",
+          "description": "Optional historical window. Unset = full archive."
+        }
+      },
+      "description": "ScoreFormRequest carries the numbers to score plus an optional window."
+    },
+    "v1ScoreFormResponse": {
+      "type": "object",
+      "properties": {
+        "heat": {
+          "type": "number",
+          "format": "double",
+          "description": "observed_pair_hits / expected_pair_hits × 100. 100 = random average."
+        },
+        "observed_pair_hits": {
+          "type": "string",
+          "format": "int64",
+          "description": "Sum of occurrence counts of the set's pairs in the window."
+        },
+        "expected_pair_hits": {
+          "type": "number",
+          "format": "double",
+          "description": "draws × C(len(form),2) × C(6,2)/C(MaxNumber,2)."
+        },
+        "draws": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of draws in the archive window."
+        },
+        "pair_count": {
+          "type": "integer",
+          "format": "int32",
+          "description": "C(len(form), 2) — number of pairs the score averages over."
+        }
+      },
+      "description": "ScoreFormResponse is the absolute heat index plus its raw components."
     },
     "v1SimulateDrawResult": {
       "type": "object",

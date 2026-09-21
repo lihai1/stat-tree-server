@@ -303,6 +303,31 @@ var _ = Describe("LotteryArchive", func() {
 		})
 	})
 
+	Context("ScoreForm", func() {
+		It("should compute observed hits, expectation, and heat index", func() {
+			// Two draws, both containing {1,2,3}: the form's three pairs
+			// ({1,2},{1,3},{2,3}) each hit twice → observed = 6.
+			arch := NewLotteryArchive(Lottery, time.Time{}, time.Time{},
+				draws([][]int{{1, 2, 3, 4, 5, 6}, {1, 2, 3, 7, 8, 9}}))
+			resp := arch.ScoreForm([]int{1, 2, 3})
+			Expect(resp.GetObservedPairHits()).To(Equal(int64(6)))
+			Expect(resp.GetPairCount()).To(Equal(int32(3)))
+			Expect(resp.GetDraws()).To(Equal(int32(2)))
+			// expected = 2 draws × C(3,2) × C(6,2)/C(37,2) = 6 × 15/666
+			Expect(resp.GetExpectedPairHits()).To(BeNumerically("~", 6.0*15.0/666.0, 1e-9))
+			// heat = 100 × 6 / expected = 4440
+			Expect(resp.GetHeat()).To(BeNumerically("~", 4440.0, 0.01))
+		})
+
+		It("should return zero heat on an empty archive", func() {
+			arch := NewLotteryArchive(Lottery, time.Time{}, time.Time{}, nil)
+			resp := arch.ScoreForm([]int{1, 2, 3})
+			Expect(resp.GetHeat()).To(Equal(0.0))
+			Expect(resp.GetDraws()).To(Equal(int32(0)))
+			Expect(resp.GetPairCount()).To(Equal(int32(3)))
+		})
+	})
+
 	Context("with an empty archive", func() {
 		It("should return 6 empty groups and archive size 0", func() {
 			arch := NewLotteryArchive(Lottery, time.Time{}, time.Time{}, nil)

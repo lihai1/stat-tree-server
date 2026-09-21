@@ -23,6 +23,7 @@ const (
 	LotteryService_GenerateForm_FullMethodName  = "/lottery.v1.LotteryService/GenerateForm"
 	LotteryService_GetStatistics_FullMethodName = "/lottery.v1.LotteryService/GetStatistics"
 	LotteryService_Analyze_FullMethodName       = "/lottery.v1.LotteryService/Analyze"
+	LotteryService_ScoreForm_FullMethodName     = "/lottery.v1.LotteryService/ScoreForm"
 	LotteryService_Simulate_FullMethodName      = "/lottery.v1.LotteryService/Simulate"
 )
 
@@ -44,6 +45,9 @@ type LotteryServiceClient interface {
 	GetStatistics(ctx context.Context, in *GetStatisticsRequest, opts ...grpc.CallOption) (*GetStatisticsResponse, error)
 	// Analyze evaluates user-selected numbers against historical winning draws.
 	Analyze(ctx context.Context, in *AnalyzeRequest, opts ...grpc.CallOption) (*AnalyzeResponse, error)
+	// ScoreForm computes an absolute "heat index" for a set: observed pair
+	// co-occurrences vs. the random expectation over the window (×100).
+	ScoreForm(ctx context.Context, in *ScoreFormRequest, opts ...grpc.CallOption) (*ScoreFormResponse, error)
 	// Simulate backtests a user's numbers against historical draws over a date
 	// window, computing ticket cost spent and prizes won per draw and in total.
 	// Supports systematic forms (6, 8, 10, 12 numbers) where all C(N,6)
@@ -99,6 +103,16 @@ func (c *lotteryServiceClient) Analyze(ctx context.Context, in *AnalyzeRequest, 
 	return out, nil
 }
 
+func (c *lotteryServiceClient) ScoreForm(ctx context.Context, in *ScoreFormRequest, opts ...grpc.CallOption) (*ScoreFormResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ScoreFormResponse)
+	err := c.cc.Invoke(ctx, LotteryService_ScoreForm_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *lotteryServiceClient) Simulate(ctx context.Context, in *SimulateRequest, opts ...grpc.CallOption) (*SimulateResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SimulateResponse)
@@ -127,6 +141,9 @@ type LotteryServiceServer interface {
 	GetStatistics(context.Context, *GetStatisticsRequest) (*GetStatisticsResponse, error)
 	// Analyze evaluates user-selected numbers against historical winning draws.
 	Analyze(context.Context, *AnalyzeRequest) (*AnalyzeResponse, error)
+	// ScoreForm computes an absolute "heat index" for a set: observed pair
+	// co-occurrences vs. the random expectation over the window (×100).
+	ScoreForm(context.Context, *ScoreFormRequest) (*ScoreFormResponse, error)
 	// Simulate backtests a user's numbers against historical draws over a date
 	// window, computing ticket cost spent and prizes won per draw and in total.
 	// Supports systematic forms (6, 8, 10, 12 numbers) where all C(N,6)
@@ -153,6 +170,9 @@ func (UnimplementedLotteryServiceServer) GetStatistics(context.Context, *GetStat
 }
 func (UnimplementedLotteryServiceServer) Analyze(context.Context, *AnalyzeRequest) (*AnalyzeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Analyze not implemented")
+}
+func (UnimplementedLotteryServiceServer) ScoreForm(context.Context, *ScoreFormRequest) (*ScoreFormResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ScoreForm not implemented")
 }
 func (UnimplementedLotteryServiceServer) Simulate(context.Context, *SimulateRequest) (*SimulateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Simulate not implemented")
@@ -250,6 +270,24 @@ func _LotteryService_Analyze_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LotteryService_ScoreForm_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ScoreFormRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LotteryServiceServer).ScoreForm(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LotteryService_ScoreForm_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LotteryServiceServer).ScoreForm(ctx, req.(*ScoreFormRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _LotteryService_Simulate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SimulateRequest)
 	if err := dec(in); err != nil {
@@ -290,6 +328,10 @@ var LotteryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Analyze",
 			Handler:    _LotteryService_Analyze_Handler,
+		},
+		{
+			MethodName: "ScoreForm",
+			Handler:    _LotteryService_ScoreForm_Handler,
 		},
 		{
 			MethodName: "Simulate",

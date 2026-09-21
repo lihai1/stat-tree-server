@@ -5,6 +5,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	lotteryv1 "github.com/lihai1/stat-tree-server/pkg/gen"
 )
@@ -38,16 +40,16 @@ var _ = Describe("gRPC Server Integration Tests", func() {
 			Expect(resp.GetForms()).NotTo(BeNil())
 		})
 
-		It("should handle invalid how_many", func() {
+		It("should reject non-positive how_many", func() {
 			ctx := context.Background()
 			req := &lotteryv1.GenerateFormRequest{
 				HowMany: -1,
 			}
 
 			resp, err := grpcClient.GenerateForm(ctx, req)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(resp).NotTo(BeNil())
-			Expect(resp.GetForms()).To(BeEmpty())
+			Expect(err).To(HaveOccurred())
+			Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+			Expect(resp).To(BeNil())
 		})
 	})
 

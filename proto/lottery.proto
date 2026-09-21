@@ -48,6 +48,15 @@ service LotteryService {
     };
   }
 
+  // ScoreForm computes an absolute "heat index" for a set: observed pair
+  // co-occurrences vs. the random expectation over the window (×100).
+  rpc ScoreForm(ScoreFormRequest) returns (ScoreFormResponse) {
+    option (google.api.http) = {
+      post: "/api/score/form"
+      body: "*"
+    };
+  }
+
   // Simulate backtests a user's numbers against historical draws over a date
   // window, computing ticket cost spent and prizes won per draw and in total.
   // Supports systematic forms (6, 8, 10, 12 numbers) where all C(N,6)
@@ -158,6 +167,28 @@ message FrequencyGroup {
   int32 combos = 2;
   // Frequency entries in this group, sorted by count descending.
   repeated FrequencyEntry entries = 3;
+}
+
+// ScoreFormRequest carries the numbers to score plus an optional window.
+message ScoreFormRequest {
+  // The user's selected numbers to score (at least 2).
+  repeated int32 form = 1;
+  // Optional historical window. Unset = full archive.
+  DateWindow window = 2;
+}
+
+// ScoreFormResponse is the absolute heat index plus its raw components.
+message ScoreFormResponse {
+  // observed_pair_hits / expected_pair_hits × 100. 100 = random average.
+  double heat = 1;
+  // Sum of occurrence counts of the set's pairs in the window.
+  int64 observed_pair_hits = 2;
+  // draws × C(len(form),2) × C(6,2)/C(MaxNumber,2).
+  double expected_pair_hits = 3;
+  // Number of draws in the archive window.
+  int32 draws = 4;
+  // C(len(form), 2) — number of pairs the score averages over.
+  int32 pair_count = 5;
 }
 
 // HealthCheckRequest is an empty request for health check.

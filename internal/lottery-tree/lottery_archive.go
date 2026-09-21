@@ -182,10 +182,49 @@ func (a *LotteryArchive) TopGroups(howMany, size int, mode string) []NodeEntry {
 // treated as a regular number; the traversal explores all subsets, so forms
 // of any length are handled without truncation.
 func (a *LotteryArchive) AnalyzeForm(form []int) *lotteryv1.AnalyzeResponse {
+	var resp *lotteryv1.AnalyzeResponse
 	if a.Tree == nil {
-		return emptyAnalyzeResponse()
+		resp = emptyAnalyzeResponse()
+	} else {
+		resp = a.Tree.AnalyzeArray(form, maxGroupSize)
 	}
-	return a.Tree.AnalyzeArray(form, maxGroupSize)
+	// Combos = total possible groups of this size across the whole number
+	// universe, per the documented proto contract (C(MaxNumber, size)).
+	for _, g := range resp.FrequencyGroups {
+		g.Combos = int32(binomialCount(a.MaxNumber(), int(g.Size)))
+	}
+	return resp
+}
+
+// ScoreForm returns an absolute heat index for the form: how often its
+// pairs co-occurred in the archive vs. the random expectation (×100).
+// A heat of 100 is exactly average; higher means the set's pairs hit
+// together more often than chance. The archive's draw size and number
+// universe are used, so it generalizes to non-37-number lotteries.
+func (a *LotteryArchive) ScoreForm(form []int) *lotteryv1.ScoreFormResponse {
+	pairs := binomialCount(len(form), 2)
+	var observed int64
+	if a.Tree != nil {
+		resp := a.Tree.AnalyzeArray(form, maxGroupSize)
+		for _, e := range resp.FrequencyGroups[1].GetEntries() {
+			observed += int64(e.GetCount())
+		}
+	}
+	// P(a specific pair appears in a draw) = C(6,2)/C(MaxNumber,2).
+	expected := float64(a.Size()) * float64(pairs) *
+		float64(binomialCount(maxGroupSize, 2)) /
+		float64(binomialCount(a.MaxNumber(), 2))
+	var heat float64
+	if expected > 0 {
+		heat = 100 * float64(observed) / expected
+	}
+	return &lotteryv1.ScoreFormResponse{
+		Heat:             heat,
+		ObservedPairHits: observed,
+		ExpectedPairHits: expected,
+		Draws:            int32(a.Size()),
+		PairCount:        int32(pairs),
+	}
 }
 
 // HasWon reports whether the given combination has already won. The

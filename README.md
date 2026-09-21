@@ -173,6 +173,7 @@ go build -o stat-tree-server cmd/server/main.go
 - `POST /api/generate/form` - Generate lottery number combinations
 - `POST /api/generate/pares` - Get statistics on number pairs/groups (form_type ≤ 6); response includes `total_draws_in_range` (draw count in the requested window)
 - `POST /api/generate/analyze` - Analyze user-selected numbers (all treated as regulars)
+- `POST /api/score/form` - Score a form's pair-heat index vs. random expectation (100 = average)
 - `POST /api/generate/simulate` - Backtest a ticket against historical draws
 
 ### gRPC Services
@@ -182,6 +183,7 @@ The server exposes gRPC services defined in `proto/lottery.proto`:
 - `GenerateForm` - Generate lottery number combinations (strong number appended)
 - `GetStatistics` - Calculate statistics for number pairs/groups (form_type ≤ 6); response includes `total_draws_in_range`
 - `Analyze` - Analyze user-selected numbers against historical data (all regulars)
+- `ScoreForm` - Absolute pair-heat index for a form (observed pair hits vs. random expectation ×100; 100 = average)
 - `Simulate` - Backtest a ticket against every historical draw in a date window
 
 ## Configuration

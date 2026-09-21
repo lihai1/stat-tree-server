@@ -51,6 +51,10 @@ sequenceDiagram
         SVC->>ARCH: AnalyzeForm(form) — all numbers as regulars
         ARCH-->>SVC: AnalyzeResponse { frequency_groups, archive_size }
         SVC-->>BFF: AnalyzeResponse
+    else ScoreForm
+        SVC->>ARCH: ScoreForm(form) — pair hits vs. random expectation
+        ARCH-->>SVC: ScoreFormResponse { heat, observed/expected pair hits, draws, pair_count }
+        SVC-->>BFF: ScoreFormResponse
     else Simulate
         SVC->>ARCH: Iterate draws, match combinations per draw
         ARCH-->>SVC: Per-draw results + summary

@@ -41,7 +41,7 @@ The orchestrator repo's `make proto-go` runs this inside the container.
 
 `lottery.v1.LotteryService` (proto/lottery.proto:18):
 
-- `HealthCheck`, `GenerateForm`, `GetStatistics`, `Analyze`, `Simulate`.
+- `HealthCheck`, `GenerateForm`, `GetStatistics`, `Analyze`, `ScoreForm`, `Simulate`.
 
 Both the gRPC server and the REST gateway validate JWTs using the same
 `AuthMiddleware` instance (shared JWKS cache). The gRPC interceptor reads the
@@ -52,7 +52,7 @@ Keycloak JWT (defense-in-depth; Traefik also validates at edge).
 REST gateway (via grpc-gateway, gateway.go):
 
 - `GET /health` (open)
-- `POST /api/generate/form`, `POST /api/generate/pares`, `POST /api/generate/analyze`, `POST /api/generate/simulate`
+- `POST /api/generate/form`, `POST /api/generate/pares`, `POST /api/generate/analyze`, `POST /api/generate/simulate`, `POST /api/score/form`
 - `GET /swagger` (openapi JSON)
 
 `/health` is always open. All other routes (both gRPC and HTTP) require JWT
@@ -118,7 +118,9 @@ See `.env.example`.
   is immutable after construction and safe for concurrent read-only use.
 - Default archive start date: `2004-02-12` (current Israeli Lotto format, numbers 1–37).
 - `GetStatistics` rejects `form_type > 6` (the tree is built through depth 6). Response includes `total_draws_in_range` (number of draws in the requested date window).
-- `Analyze` treats all supplied numbers as regular numbers — no trailing strong-number stripping.
+- `Analyze` treats all supplied numbers as regular numbers — no trailing strong-number stripping. `FrequencyGroup.combos` is populated with the universe denominator C(37, size).
+- `GenerateForm` rejects non-positive `how_many` with `InvalidArgument` (no silent default).
+- `ScoreForm` returns an absolute pair-heat index: `heat = observed_pair_hits / (draws × C(len(form),2) × C(6,2)/C(37,2)) × 100`, where 100 = random expectation. Descriptive, not predictive. Rejects forms with fewer than 2 numbers.
 
 ## Gotchas
 

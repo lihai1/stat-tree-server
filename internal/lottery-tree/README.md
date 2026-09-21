@@ -103,6 +103,7 @@ read-only and safe for concurrent use.
 - `TopGroups(howMany, size, mode)`: Return the top `howMany` groups of `size` numbers by frequency
 - `HasWon(combo)`: O(1) hash-set check whether a combination has already won
 - `AnalyzeForm(form)`: Produce `AnalyzeResponse` with frequency groups for all subsets of `form` up to size 6
+- `ScoreForm(form)`: Produce `ScoreFormResponse` — an absolute pair-heat index (`observed_pair_hits / expected_pair_hits × 100`, where `expected_pair_hits = draws × C(len(form),2) × C(6,2) / C(MaxNumber,2)`; 100 = random expectation) plus the raw components
 - `NewFormGenerator(formType, mode)`: Create a request-scoped `FormGenerator` borrowing this archive
 
 ### FormGenerator (`form_generator.go`)
@@ -226,6 +227,10 @@ The tree is built recursively from historical lottery forms. Each node represent
 ### Form Analysis
 
 The `AnalyzeForm` method traverses the tree with a user's form, recording the frequency of each number sequence found in the historical data. All numbers in the form are treated as regular numbers — no trailing number is stripped as a strong number.
+
+### Form Scoring
+
+The `ScoreForm` method reuses the pair-level counts (tree depth 2) to compute an absolute "heat index": `heat = observed_pair_hits / expected_pair_hits × 100`, where `expected_pair_hits = draws × C(len(form),2) × C(6,2) / C(MaxNumber,2)`. A heat of 100 means the form's pairs appear exactly as often as random expectation; above/below 100 is historically hotter/colder. The score is descriptive, not predictive.
 
 ## Historical Format & Archive Default
 

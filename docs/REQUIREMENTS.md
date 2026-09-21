@@ -9,6 +9,7 @@ Derived from the actual codebase (`go.mod`, `internal/`, `db-migration/`,
 ## Functional Requirements
 
 ### gRPC / REST API
+
 - **FR-1** `HealthCheck` — return service status, version, and
   `draws_loaded` count (number of historical draws in the archive).
 - **FR-2** `GenerateForm` — generate `how_many` lottery number combinations
@@ -33,8 +34,18 @@ Derived from the actual codebase (`go.mod`, `internal/`, `db-migration/`,
   winnings, net, per-tier totals, draws priced with real scraped prizes).
   Prize amounts use scraped per-draw `prize_amounts` when available, falling
   back to service defaults or user-supplied overrides (`SimulateRequest.prize_amounts`).
+- **FR-4b** `ScoreForm` — compute an absolute "heat index" for a form over the
+  archive window: `heat = observed_pair_hits / expected_pair_hits × 100`, where
+  `observed_pair_hits` sums the occurrence counts of all C(len(form),2) pairs
+  and `expected_pair_hits = draws × C(len(form),2) × C(6,2) / C(37,2)`. A heat
+  of 100 means the set's pair frequency equals the random expectation; values
+  above/below are historically above/below average. The score is descriptive,
+  not predictive. Forms with fewer than 2 numbers are rejected with
+  `InvalidArgument`. Response also exposes the raw components
+  (`observed_pair_hits`, `expected_pair_hits`, `draws`, `pair_count`).
 
 ### Scraper & Seeder
+
 - **FR-5** Scheduled scraper fetches fresh lottery draws from the Israeli
   lottery site (pais.co.il) on a cron schedule (default: `0 3 * * *`).
 - **FR-5a** Prize scraper populates the `prize_amounts` JSONB column on
@@ -49,6 +60,7 @@ Derived from the actual codebase (`go.mod`, `internal/`, `db-migration/`,
   data on failure (seed remains as fallback).
 
 ### Authentication
+
 - **FR-8** Validate Keycloak-issued JWTs (RS256) against the realm JWKS
   endpoint as defense-in-depth (Traefik also validates at the edge).
 - **FR-9** `AUTH_ENABLED=false` disables JWT validation for local
@@ -92,7 +104,10 @@ Derived from the actual codebase (`go.mod`, `internal/`, `db-migration/`,
 - **ALG-6** `GetStatistics` rejects `form_type > 6` — the tree is built
   through depth 6 and larger group sizes have no meaning.
 - **ALG-7** `Analyze` treats all supplied numbers as regular numbers — no
-  trailing number is stripped as a strong number.
+  trailing number is stripped as a strong number. Each `FrequencyGroup.combos`
+  is populated with the universe denominator `C(37, size)`.
+- **ALG-8** `GenerateForm` rejects `how_many <= 0` with `InvalidArgument` —
+  there is no silent default for missing or negative counts.
 
 ---
 
